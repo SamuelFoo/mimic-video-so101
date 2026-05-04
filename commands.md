@@ -34,7 +34,27 @@ lerobot-edit-dataset \
   --operation.episode_indices "[4]"
 ```
 
-## Evaluate
+# Record Dataset (MacBook Emerson)
+
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/tty.usbmodem5B140318671 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 0, width: 640, height: 480, fps: 20}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/tty.usbmodem5B140333641 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true \
+    --dataset.repo_id=${HF_USER}/Ex1_attempt_1 \
+    --dataset.num_episodes=20 \
+    --dataset.single_task="Move the tangerine" \
+    --dataset.streaming_encoding=true \
+    # --dataset.vcodec=auto \
+    --dataset.encoder_threads=2
+```
+
+## Record Dataset (Samuels )
 
 ```bash
 lerobot-record \
