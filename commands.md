@@ -33,3 +33,26 @@ lerobot-edit-dataset \
   --operation.type delete_episodes \
   --operation.episode_indices "[4]"
 ```
+
+## Evaluate
+
+```bash
+lerobot-record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ front: {type: opencv, index_or_path: 0, width: 640, height: 480, fps: 30}}" \
+  --display_data=true \
+  --dataset.repo_id=${HF_USER}/eval_act_your_dataset \
+  --dataset.root="${HOME}/workspaces/robot_learning_project/data/eval_act_your_dataset_1" \
+  --dataset.fps=30 \
+  --dataset.num_episodes=10 \
+  --dataset.reset_time_s=0 \
+  --dataset.single_task="Your task description" \
+  --dataset.video=true \
+  --dataset.streaming_encoding=true \
+  --dataset.encoder_threads=2 \
+  --dataset.vcodec=auto \
+  --dataset.push_to_hub=false \
+  --policy.path=${HOME}/workspaces/robot_learning_project/act_policy/checkpoints/last/pretrained_model
+```
