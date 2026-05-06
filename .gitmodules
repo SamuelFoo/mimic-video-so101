@@ -1,3 +1,6 @@
 [submodule "isaac_so_arm101"]
 	path = isaac_so_arm101
 	url = https://github.com/MuammerBay/isaac_so_arm101.git
+[submodule "mimic-video"]
+	path = mimic-video
+	url = https://github.com/SamuelFoo/mimic-video

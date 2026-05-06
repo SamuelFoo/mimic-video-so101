@@ -45,12 +45,14 @@ echo "Dataset copy done."
 echo ""
 
 lerobot-train \
-  --dataset.repo_id="${DATASET_DST}" \
+  --dataset.repo_id="${HF_USER}/record-test-merged" \
+  --dataset.root="${DATASET_DST}" \
   --policy.type=act \
   --output_dir="${OUTPUT_DIR}" \
   --job_name=act_single_arm \
   --policy.device=cuda \
   --wandb.enable=true \
-  --policy.repo_id="${HF_USER}/act_policy"
+  --policy.repo_id="${HF_USER}/act_policy" \
+  --batch_size=16 \
 
 echo "=== Training Complete ==="

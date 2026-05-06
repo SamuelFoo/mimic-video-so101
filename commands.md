@@ -19,10 +19,10 @@ lerobot-train \
 
 ```bash
 lerobot-edit-dataset \
-  --new_repo_id /home/dell/workspaces/robot_learning_project/data/20260428/record-test-merged \
-  --repo_id /home/dell/workspaces/robot_learning_project/data/20260428/record-test-merged \
+  --new_repo_id /cluster/scratch/samfoo/robot_learning/data/ex1_merged \
+  --repo_id /cluster/scratch/samfoo/robot_learning/data/ex1_merged \
   --operation.type merge \
-  --operation.repo_ids "['/home/dell/workspaces/robot_learning_project/data/20260428/record-test-2', '/home/dell/workspaces/robot_learning_project/data/20260428/record-test-3', '/home/dell/workspaces/robot_learning_project/data/20260428/record-test-4']"
+  --operation.repo_ids "['/cluster/scratch/samfoo/robot_learning/data/ex1_attempt_1', '/cluster/scratch/samfoo/robot_learning/data/ex1_attempt_2']"
 ```
 
 ## Delete Episodes
@@ -75,4 +75,10 @@ lerobot-record \
   --dataset.vcodec=auto \
   --dataset.push_to_hub=false \
   --policy.path=${HOME}/workspaces/robot_learning_project/act_policy/checkpoints/last/pretrained_model
+```
+
+## Patching torchcodec in lerobot installation
+
+```bash
+conda install -c conda-forge libstdcxx-ng
 ```
