@@ -22,8 +22,7 @@
 #SBATCH --output=/cluster/scratch/samfoo/slurm_runs/slurm-mimic-video-%j.out
 #SBATCH --error=/cluster/scratch/samfoo/slurm_runs/slurm-mimic-video-%j.err
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=rtx_4090:4
-#SBATCH --ntasks-per-node=1
+#SBATCH --gpus-per-node=rtx_3090:2
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=4G
 #SBATCH --tmp=400G
@@ -60,8 +59,33 @@ WANDB_ENABLED="${WANDB_ENABLED:-true}"
 WANDB_PROJECT="${WANDB_PROJECT:-mimic-video}"
 WANDB_ENTITY="${WANDB_ENTITY:-robot-learning-wm}"
 WANDB_MODE="${WANDB_MODE:-online}"
-WANDB_LOG_EVERY_N="${WANDB_LOG_EVERY_N:-100}"
+WANDB_LOG_EVERY_N="${WANDB_LOG_EVERY_N:-1}"
 WANDB_DIR="${WANDB_DIR:-${OUTPUT_DIR}/wandb}"
+
+# Cap validation samples per cycle so we don't spend 30+h at iter 0.
+MAX_VAL_ITER="${MAX_VAL_ITER:-8}"
+VAL_SHUFFLE="${VAL_SHUFFLE:-True}"
+VAL_NUM_SAMPLING_STEPS="${VAL_NUM_SAMPLING_STEPS:-12}"
+VAL_RUN_GENERATED_VIDEO="${VAL_RUN_GENERATED_VIDEO:-False}"
+
+# Smaller action decoder defaults for feasibility experiments. Override these
+# before sbatch to restore the baseline 24-block / 1024-channel model.
+ACTION_MODEL_CHANNELS="${ACTION_MODEL_CHANNELS:-512}"
+ACTION_MODEL_BLOCKS="${ACTION_MODEL_BLOCKS:-12}"
+ACTION_MODEL_HEADS="${ACTION_MODEL_HEADS:-8}"
+ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK="${ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK:-512}"
+ACTION_MODEL_ADALN_LORA_DIM="${ACTION_MODEL_ADALN_LORA_DIM:-64}"
+
+# Dataloader knobs. Defaults in data_action.py (num_workers=12, prefetch=8) blow
+# past the per-job memory budget on video batches and OOM-kill workers.
+DATALOADER_NUM_WORKERS="${DATALOADER_NUM_WORKERS:-4}"
+DATALOADER_PREFETCH_FACTOR="${DATALOADER_PREFETCH_FACTOR:-2}"
+
+# Training batch knobs. For the default bsz128 experiment on 2 GPUs, the
+# original local batch is 128 / 2 = 64, with no gradient accumulation.
+TRAIN_LOCAL_BATCH_SIZE="${TRAIN_LOCAL_BATCH_SIZE:-64}"
+GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-1}"
+
 WANDB__SERVICE_WAIT="${WANDB__SERVICE_WAIT:-120}"
 WANDB_START_METHOD="${WANDB_START_METHOD:-thread}"
 
@@ -122,6 +146,8 @@ echo "Output dir:  ${OUTPUT_DIR}"
 echo "WandB:       enabled=${WANDB_ENABLED}, project=${WANDB_PROJECT}, mode=${WANDB_MODE}"
 echo "Nodes:       ${NNODES}"
 echo "GPUs/node:   ${GPUS_PER_NODE}"
+echo "Local batch: ${TRAIN_LOCAL_BATCH_SIZE}"
+echo "Grad accum:  ${GRAD_ACCUM_ITER}"
 echo
 
 # Stage on every allocated node (one rsync per node; srun handles that).
@@ -161,6 +187,19 @@ srun --nodes="${NNODES}" --ntasks-per-node=1 \
            trainer.callbacks.wandb.entity="${WANDB_ENTITY}" \
            trainer.callbacks.wandb.mode="${WANDB_MODE}" \
            trainer.callbacks.wandb.log_every_n="${WANDB_LOG_EVERY_N}" \
+           trainer.max_val_iter="${MAX_VAL_ITER}" \
+           dataloader_val.sampler.shuffle="${VAL_SHUFFLE}" \
+           model.config.validation_num_sampling_steps="${VAL_NUM_SAMPLING_STEPS}" \
+           model.config.validation_run_generated_video="${VAL_RUN_GENERATED_VIDEO}" \
+           dataloader_train.batch_size="${TRAIN_LOCAL_BATCH_SIZE}" \
+           trainer.grad_accum_iter="${GRAD_ACCUM_ITER}" \
+           world2action_pipe.net.model_channels="${ACTION_MODEL_CHANNELS}" \
+           world2action_pipe.net.num_blocks="${ACTION_MODEL_BLOCKS}" \
+           world2action_pipe.net.num_heads="${ACTION_MODEL_HEADS}" \
+           world2action_pipe.net.pair_timestep_feature_rank="${ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK}" \
+           world2action_pipe.net.adaln_lora_dim="${ACTION_MODEL_ADALN_LORA_DIM}" \
+           dataloader_train.num_workers="${DATALOADER_NUM_WORKERS}" \
+           dataloader_train.prefetch_factor="${DATALOADER_PREFETCH_FACTOR}" \
            job.name="${EXPERIMENT}_${SLURM_JOB_ID}"
 
 echo "=== Training Complete ==="
