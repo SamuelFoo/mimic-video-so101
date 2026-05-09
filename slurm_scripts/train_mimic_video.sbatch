@@ -22,7 +22,7 @@
 #SBATCH --output=/cluster/scratch/samfoo/slurm_runs/slurm-mimic-video-%j.out
 #SBATCH --error=/cluster/scratch/samfoo/slurm_runs/slurm-mimic-video-%j.err
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=rtx_3090:2
+#SBATCH --gpus-per-node=rtx_4090:2
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=4G
 #SBATCH --tmp=400G
@@ -76,10 +76,17 @@ ACTION_MODEL_HEADS="${ACTION_MODEL_HEADS:-8}"
 ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK="${ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK:-512}"
 ACTION_MODEL_ADALN_LORA_DIM="${ACTION_MODEL_ADALN_LORA_DIM:-64}"
 
-# Dataloader knobs. Defaults in data_action.py (num_workers=12, prefetch=8) blow
-# past the per-job memory budget on video batches and OOM-kill workers.
-DATALOADER_NUM_WORKERS="${DATALOADER_NUM_WORKERS:-4}"
-DATALOADER_PREFETCH_FACTOR="${DATALOADER_PREFETCH_FACTOR:-2}"
+# Dataloader knobs
+DATALOADER_NUM_WORKERS="${DATALOADER_NUM_WORKERS:-2}"
+DATALOADER_PREFETCH_FACTOR="${DATALOADER_PREFETCH_FACTOR:-1}"
+DATALOADER_PERSISTENT_WORKERS="${DATALOADER_PERSISTENT_WORKERS:-True}"
+VAL_DATALOADER_NUM_WORKERS="${VAL_DATALOADER_NUM_WORKERS:-0}"
+MIMIC_STATS_NUM_WORKERS="${MIMIC_STATS_NUM_WORKERS:-2}"
+MIMIC_STATS_BATCH_SIZE="${MIMIC_STATS_BATCH_SIZE:-2}"
+if [[ "${DATALOADER_NUM_WORKERS}" == "0" ]]; then
+    DATALOADER_PREFETCH_FACTOR="None"
+    DATALOADER_PERSISTENT_WORKERS="False"
+fi
 
 # Training batch knobs. For the default bsz128 experiment on 2 GPUs, the
 # original local batch is 128 / 2 = 64, with no gradient accumulation.
@@ -108,6 +115,8 @@ export WANDB_MODE
 export WANDB_DIR
 export WANDB__SERVICE_WAIT
 export WANDB_START_METHOD
+export MIMIC_STATS_NUM_WORKERS
+export MIMIC_STATS_BATCH_SIZE
 export IMAGINAIRE_OUTPUT_ROOT="${OUTPUT_DIR}"
 mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${WANDB_DIR}"
 
@@ -148,6 +157,8 @@ echo "Nodes:       ${NNODES}"
 echo "GPUs/node:   ${GPUS_PER_NODE}"
 echo "Local batch: ${TRAIN_LOCAL_BATCH_SIZE}"
 echo "Grad accum:  ${GRAD_ACCUM_ITER}"
+echo "Workers:     train=${DATALOADER_NUM_WORKERS}, val=${VAL_DATALOADER_NUM_WORKERS}, stats=${MIMIC_STATS_NUM_WORKERS}"
+echo "Prefetch:    train=${DATALOADER_PREFETCH_FACTOR}"
 echo
 
 # Stage on every allocated node (one rsync per node; srun handles that).
@@ -200,6 +211,8 @@ srun --nodes="${NNODES}" --ntasks-per-node=1 \
            world2action_pipe.net.adaln_lora_dim="${ACTION_MODEL_ADALN_LORA_DIM}" \
            dataloader_train.num_workers="${DATALOADER_NUM_WORKERS}" \
            dataloader_train.prefetch_factor="${DATALOADER_PREFETCH_FACTOR}" \
+           dataloader_train.persistent_workers="${DATALOADER_PERSISTENT_WORKERS}" \
+           dataloader_val.num_workers="${VAL_DATALOADER_NUM_WORKERS}" \
            job.name="${EXPERIMENT}_${SLURM_JOB_ID}"
 
 echo "=== Training Complete ==="
