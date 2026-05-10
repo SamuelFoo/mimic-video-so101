@@ -209,6 +209,11 @@ srun --nodes="${NNODES}" --ntasks-per-node=1 \
            world2action_pipe.net.num_heads="${ACTION_MODEL_HEADS}" \
            world2action_pipe.net.pair_timestep_feature_rank="${ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK}" \
            world2action_pipe.net.adaln_lora_dim="${ACTION_MODEL_ADALN_LORA_DIM}" \
+           model.config.pipe_config.net.model_channels="${ACTION_MODEL_CHANNELS}" \
+           model.config.pipe_config.net.num_blocks="${ACTION_MODEL_BLOCKS}" \
+           model.config.pipe_config.net.num_heads="${ACTION_MODEL_HEADS}" \
+           model.config.pipe_config.net.pair_timestep_feature_rank="${ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK}" \
+           model.config.pipe_config.net.adaln_lora_dim="${ACTION_MODEL_ADALN_LORA_DIM}" \
            dataloader_train.num_workers="${DATALOADER_NUM_WORKERS}" \
            dataloader_train.prefetch_factor="${DATALOADER_PREFETCH_FACTOR}" \
            dataloader_train.persistent_workers="${DATALOADER_PERSISTENT_WORKERS}" \
