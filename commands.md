@@ -19,10 +19,11 @@ lerobot-train \
 
 ```bash
 lerobot-edit-dataset \
-  --new_repo_id /cluster/scratch/samfoo/robot_learning/data/ex1_merged \
-  --repo_id /cluster/scratch/samfoo/robot_learning/data/ex1_merged \
+  --new_repo_id ex1_merged \
+  --new_root /home/ubuntu/workspaces/robot_learning_project/data/ex1_merged \
   --operation.type merge \
-  --operation.repo_ids "['/cluster/scratch/samfoo/robot_learning/data/ex1_attempt_1', '/cluster/scratch/samfoo/robot_learning/data/ex1_attempt_2']"
+  --operation.repo_ids "['ex1_attempt_1', 'ex1_attempt_2']" \
+  --operation.roots "['/home/ubuntu/workspaces/robot_learning_project/data/ex1_attempt_1', '/home/ubuntu/workspaces/robot_learning_project/data/ex1_attempt_2']"
 ```
 
 ## Delete Episodes
