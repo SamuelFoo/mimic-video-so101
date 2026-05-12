@@ -15,7 +15,17 @@ lerobot-train \
   --policy.repo_id=${HF_USER}/act_policy
 ```
 
-## Merge
+## Merge directly in robot-learning Team HF repo
+
+```bash
+lerobot-edit-dataset \
+--new_repo_id robot-learning/Ex1_merged \
+--operation.type merge \
+--operation.repo_ids "['robot-learning/Ex1_attempt_1', 'robot-learning/Ex1_attempt_2', 'robot-learning/Ex1_attempt_3']" \
+--push_to_hub True
+```
+
+## Merge (Local Samuel)
 
 ```bash
 lerobot-edit-dataset \

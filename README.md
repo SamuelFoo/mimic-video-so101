@@ -1,5 +1,13 @@
 ## Quickstart
 
+### Cloning Repo
+
+Clone repo and submodles. 
+
+```bash
+git clone --recurse-submodules git@github.com:<project_url>
+```
+
 ### Python Environments
 
 Install `mimic-video` dependencies. Requires `uv`.
