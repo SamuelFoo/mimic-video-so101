@@ -35,7 +35,6 @@ DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_merged}"
 # cosmos_predict2/configs/experiment/video2world.py. Lower rank = less capacity
 # (helps with overfitting)
 LORA_RANK="${LORA_RANK:-32}"
-EXPERIMENT="${EXPERIMENT:-v2w_${DATASET_NAME}_lora_rank${LORA_RANK}_lr1.778e-04_bsz32}"
 
 # The video backbone is loaded from
 #   ${CHECKPOINT_DIR}/video_backbone/v2w_pretrained_cosmos.pt
@@ -59,6 +58,7 @@ SAVE_ITER="${SAVE_ITER:-5}"
 # Optional learning-rate override. Unset = use the experiment grid's LR
 # (encoded in the experiment name, e.g. 1.778e-04 for the default).
 LR="${LR:-}"
+EXPERIMENT="${EXPERIMENT:-v2w_${DATASET_NAME}_lora_rank${LORA_RANK}_lr${LR}_bsz32}"
 
 # Wandb
 WANDB_ENABLED="${WANDB_ENABLED:-true}"
