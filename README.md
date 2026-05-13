@@ -87,3 +87,37 @@ Run Video2World inference over the merged LeRobot dataset in three steps. All co
 ```bash
 RUN_DIR=runs/video_inference/ex1_merged_2026-05-13_12-15-23 ./scripts/infer_video.sh
 ```
+
+### Video Model Finetuning (ex1_merged)
+
+End-to-end pipeline for finetuning the Cosmos-Predict2 2B video backbone on the merged LeRobot dataset. Uses LoRA (rank 256) by default. All commands run from the repo root.
+
+**1. Convert LeRobot to zarr.** Same step as inference — skip if already done.
+
+```bash
+./scripts/process_lerobot.sh
+```
+
+**2. Build the Cosmos finetuning data layout.** Converts each `episode_*.zarr` into the `video/<ep>.mp4` + `metas/<ep>.txt` layout expected by `cosmos_predict2.data.dataset_video.Dataset`, then precomputes T5 embeddings into `t5_xxl/`. Writes to `data/${DATASET_NAME}-cosmos-video/`.
+
+```bash
+./scripts/prepare_video_finetune_data.sh
+```
+
+To re-run preprocessing after a config change: `OVERWRITE=true ./scripts/prepare_video_finetune_data.sh`. To skip T5 (e.g. iterating on the video extraction): `SKIP_T5=true ./scripts/prepare_video_finetune_data.sh`.
+
+**3. Verify the dataset entry.** [data_video.py](mimic-video/model/cosmos_predict2/configs/defaults/data_video.py) registers `ex1_merged` with `dataset_dir=data/ex1_merged-cosmos-video`. The grid in [video2world.py](mimic-video/model/cosmos_predict2/configs/experiment/video2world.py) auto-creates the experiment `v2w_ex1_merged_lora_rank256_lr1.778e-04_bsz32`. If you change `DATASET_NAME` or `FINETUNE_DATA_DIR`, update the entry in `data_video.py` to match.
+
+**4. Run training.** Defaults to the `ex1_merged` experiment with WandB logging enabled. Each run gets a timestamped output dir at `runs/cosmos_video/<EXPERIMENT>_<TIMESTAMP>/`.
+
+```bash
+./scripts/train_cosmos_video.sh
+```
+
+Useful env-var overrides:
+
+- `EXPERIMENT=v2w_ex1_merged_lora_rank256_lr1.778e-04_bsz32`
+- `MAX_ITER=20000` — max training iterations
+- `WANDB_PROJECT=cosmos-video-finetune`, `WANDB_ENTITY=...`, `WANDB_MODE=offline`
+- `VIDEO_DIT_PATH=...` — start from a different video checkpoint
+- `GPUS_PER_NODE`, `NNODES`, `MASTER_PORT` for distributed training
