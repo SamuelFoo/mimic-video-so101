@@ -68,17 +68,22 @@ Merge the dataset(s) into a single dataset (see `commands.md`).
 
 ### Video Model Inference
 
-Run Video2World inference over the merged LeRobot dataset in three steps:
+Run Video2World inference over the merged LeRobot dataset in three steps. All commands are run from the repo root.
+
+**1. Convert LeRobot to zarr and precompute T5 embeddings.** Uses the `lerobot` conda environment for the conversion and `mimic-video/model/.venv` for the embeddings.
 
 ```bash
-# Run from the repo root. This script converts LeRobot -> zarr in the `lerobot`
-# conda environment, then precomputes T5 embeddings in mimic-video/model/.venv.
 ./scripts/process_lerobot.sh
+```
 
-# Run from the repo root. This script exports existing zarr episodes to MP4
-# inputs and builds the Video2World batch JSON.
+**2. Export zarr episodes to MP4 inputs and build the Video2World batch JSON.** Each run is written to a timestamped directory under `runs/video_inference/${DATASET_NAME}_<TIMESTAMP>/`, so successive runs do not overwrite each other. Optionally set `FRAME_FRACTION=0.5` to export only the first half of each episode.
+
+```bash
 ./scripts/export_video_inputs.sh
+```
 
-# Run from the repo root. This script uses mimic-video/model/.venv.
-./scripts/infer_video.sh
+**3. Run Video2World inference.** Uses `mimic-video/model/.venv`. Before running, set `RUN_DIR` (or `TIMESTAMP`) to point at the export you want to run inference on.
+
+```bash
+RUN_DIR=runs/video_inference/ex1_merged_2026-05-13_12-15-23 ./scripts/infer_video.sh
 ```

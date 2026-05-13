@@ -13,7 +13,7 @@ MODEL_DIR="${REPO_ROOT}/mimic-video/model"
 # ---- Arguments ------------------------------------------------------------
 EX_TYPE="${EX_TYPE:-ex1}"
 DATA_ROOT="${DATA_ROOT:-${REPO_ROOT}/data}"
-DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_merged}"
+DATASET_NAME="${DATASET_NAME:-ex1_merged_2026-05-13_12-20-44}"
 RUN_DIR="${RUN_DIR:-${REPO_ROOT}/runs/video_inference/${DATASET_NAME}}"
 OUTPUT_DIR="${OUTPUT_DIR:-${RUN_DIR}/outputs}"
 BATCH_JSON="${BATCH_JSON:-${RUN_DIR}/batch.json}"

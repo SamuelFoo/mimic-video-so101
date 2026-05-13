@@ -43,8 +43,16 @@ def main() -> None:
     parser.add_argument("--fps", type=float, default=10.0)
     parser.add_argument("--episodes", type=int, nargs="*", default=None)
     parser.add_argument("--max-episodes", type=int, default=None)
+    parser.add_argument(
+        "--frame-fraction",
+        type=float,
+        default=1.0,
+        help="Keep only this leading fraction of each episode (e.g. 0.5 for first half).",
+    )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
+    if not 0.0 < args.frame_fraction <= 1.0:
+        raise SystemExit("--frame-fraction must be in (0, 1]")
     default_prompt = args.prompt or get_language_instruction(args.ex_type, args.instructions)
 
     zarr_paths = sorted(args.zarr_dir.glob("episode_*.zarr"), key=_episode_index)
@@ -80,6 +88,9 @@ def main() -> None:
             frames = root["workspace_rgb"][...]
             if frames.dtype != np.uint8:
                 frames = np.clip(frames, 0, 255).astype(np.uint8)
+            if args.frame_fraction < 1.0:
+                keep = max(5, int(round(len(frames) * args.frame_fraction)))
+                frames = frames[:keep]
             imageio.mimsave(input_video, frames, fps=args.fps, macro_block_size=1)
 
         batch.append(

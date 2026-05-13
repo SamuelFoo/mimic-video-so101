@@ -14,7 +14,8 @@ DATA_ROOT="${DATA_ROOT:-${REPO_ROOT}/data}"
 DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_merged}"
 INPUT_DIR="${INPUT_DIR:-${DATA_ROOT}/${DATASET_NAME}}"
 ZARR_DIR="${ZARR_DIR:-${DATA_ROOT}/${DATASET_NAME}-zarr}"
-RUN_DIR="${RUN_DIR:-${REPO_ROOT}/runs/video_inference/${DATASET_NAME}}"
+TIMESTAMP="${TIMESTAMP:-$(date +%Y-%m-%d_%H-%M-%S)}"
+RUN_DIR="${RUN_DIR:-${REPO_ROOT}/runs/video_inference/${DATASET_NAME}_${TIMESTAMP}}"
 EXPORTED_VIDEO_DIR="${EXPORTED_VIDEO_DIR:-${RUN_DIR}/inputs}"
 OUTPUT_DIR="${OUTPUT_DIR:-${RUN_DIR}/outputs}"
 BATCH_JSON="${BATCH_JSON:-${RUN_DIR}/batch.json}"
@@ -23,6 +24,7 @@ OVERWRITE="${OVERWRITE:-false}"
 MAX_EPISODES="${MAX_EPISODES:-}" # empty means all episodes
 EPISODES=()     # e.g. (0 4 7)
 FPS="${FPS:-10}"
+FRAME_FRACTION="${FRAME_FRACTION:-0.5}"  # e.g. 0.5 to export only first half of each episode
 # ---------------------------------------------------------------------------
 
 MODEL_PYTHON="${MODEL_DIR}/.venv/bin/python"
@@ -37,6 +39,7 @@ export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/c
 echo "=== Export Video2World inputs ==="
 echo "Ex type:       ${EX_TYPE}"
 echo "Dataset:       ${DATASET_NAME}"
+echo "Timestamp:     ${TIMESTAMP}"
 echo "Zarr dir:      ${ZARR_DIR}"
 echo "Run dir:       ${RUN_DIR}"
 echo "Batch JSON:    ${BATCH_JSON}"
@@ -64,6 +67,7 @@ export_args=(
   --instructions "${INSTRUCTIONS_JSON}"
   --prompt "${LANGUAGE_INSTRUCTION}"
   --fps "${FPS}"
+  --frame-fraction "${FRAME_FRACTION}"
 )
 
 if [[ -n "${MAX_EPISODES}" ]]; then
