@@ -25,6 +25,13 @@ source mimic-video/model/.venv/bin/activate
 ```
 
 Create a separate `lerobot` conda environment using the lerobot setup guide on HuggingFace.
+Then pin zarr to the v2 line so the generated zarr episodes are readable by
+the `mimic-video` environment:
+
+```bash
+conda activate lerobot
+pip install 'zarr<3' 'numcodecs<0.16'
+```
 
 Use the `lerobot` conda environment for preprocessing datasets and the `mimic-video` Python virtual environment for training.
 
