@@ -24,7 +24,12 @@ MODEL_DIR="${REPO_ROOT}/mimic-video/model"
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-${MODEL_DIR}/checkpoints}"
 
 # ---- Arguments ------------------------------------------------------------
-EX_TYPE="${EX_TYPE:-ex1}"
+# EX_TYPE selects the dataset registered in
+# cosmos_predict2/configs/defaults/data_video.py. Valid values today:
+#   ex1        -> ex1_merged       (data/ex1_merged-cosmos-video)
+#   ex2        -> ex2_merged       (data/ex2_merged-cosmos-video)
+#   ex1_ex2    -> ex1_ex2_merged   (MultiDataset mixing ex1 + ex2)
+EX_TYPE="${EX_TYPE:-ex1_ex2}"
 DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_merged}"
 # LoRA rank — must be one of the values in `ranks` in
 # cosmos_predict2/configs/experiment/video2world.py. Lower rank = less capacity
