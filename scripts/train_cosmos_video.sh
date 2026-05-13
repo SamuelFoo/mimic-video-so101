@@ -45,7 +45,6 @@ LORA_RANK="${LORA_RANK:-32}"
 VIDEO_DIT_PATH="${CHECKPOINT_DIR}/video_backbone/v2w_pretrained_cosmos.pt"
 
 TIMESTAMP="${TIMESTAMP:-$(date +%Y-%m-%d_%H-%M-%S)}"
-OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/runs/cosmos_video/${EXPERIMENT}_${TIMESTAMP}}"
 
 # Trainer — defaults mirror cosmos_predict2/configs/experiment/video2world.py.
 MAX_ITER="${MAX_ITER:-1000000}"      # author: 1_000_000
@@ -57,8 +56,9 @@ TRAIN_LOCAL_BATCH_SIZE="${TRAIN_LOCAL_BATCH_SIZE:-2}" # author: 32
 SAVE_ITER="${SAVE_ITER:-5}"
 # Optional learning-rate override. Unset = use the experiment grid's LR
 # (encoded in the experiment name, e.g. 1.778e-04 for the default).
-LR="${LR:-}"
+LR="${LR:-5.623e-05}"
 EXPERIMENT="${EXPERIMENT:-v2w_${DATASET_NAME}_lora_rank${LORA_RANK}_lr${LR}_bsz32}"
+OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/runs/cosmos_video/${EXPERIMENT}_${TIMESTAMP}}"
 
 # Wandb
 WANDB_ENABLED="${WANDB_ENABLED:-true}"
@@ -118,14 +118,11 @@ echo "Logging:     every ${LOGGING_ITER} iter"
 echo "Save:        every ${SAVE_ITER} iter"
 echo "Grad accum:  ${GRAD_ACCUM_ITER}"
 echo "Local bsz:   ${TRAIN_LOCAL_BATCH_SIZE:-<grid: global_bsz/world_size>}"
-echo "LR override: ${LR:-<none, use experiment grid LR>}"
+echo "LR:          ${LR}"
 echo "Rendezvous:  ${MASTER_ADDR}:${MASTER_PORT}"
 echo
 
 extra_args=()
-if [[ -n "${LR}" ]]; then
-    extra_args+=("optimizer.lr=${LR}")
-fi
 if [[ -n "${TRAIN_LOCAL_BATCH_SIZE}" ]]; then
     extra_args+=("dataloader_train.batch_size=${TRAIN_LOCAL_BATCH_SIZE}")
 fi
