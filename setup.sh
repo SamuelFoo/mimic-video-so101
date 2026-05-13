@@ -68,10 +68,10 @@ else
     wandb login
 fi
 
-if hf auth whoami >/dev/null 2>&1; then
-    echo "  hf already authenticated."
-else
+if hf auth whoami 2>/dev/null | grep -q "Not logged in"; then
     hf auth login
+else
+    echo "  hf already authenticated."
 fi
 
 # ---- 4. Cosmos checkpoints --------------------------------------------------
