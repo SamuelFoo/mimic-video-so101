@@ -30,9 +30,10 @@ Use the `lerobot` conda environment for preprocessing datasets and the `mimic-vi
 
 ### Auth
 
-In the virtual environment, login to `wandb` and `hf`:
+In the `mimic-video` virtual environment, login to `wandb` and `hf`:
 
 ```bash
+source mimic-video/model/.venv/bin/activate
 wandb login
 hf auth login
 ```
@@ -43,12 +44,14 @@ Download the checkpoints
 
 ```bash
 cd mimic-video/model
+source .venv/bin/activate
 python scripts/download_checkpoints.py
 ```
 
 Download the required dataset(s) to the `data/` folder, for example:
 
 ```bash
+source mimic-video/model/.venv/bin/activate
 hf download robot-learning/Ex1_attempt_1 \
   --repo-type dataset \
   --local-dir ex1_attempt_1
