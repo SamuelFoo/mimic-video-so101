@@ -94,7 +94,6 @@ lerobot-record \
 conda install -c conda-forge libstdcxx-ng
 ```
 
-
 ## Teleoperate (Emersons )
 ```bash
 lerobot-teleoperate \

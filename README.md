@@ -59,9 +59,10 @@ Download the required dataset(s) to the `data/` folder, for example:
 
 ```bash
 source mimic-video/model/.venv/bin/activate
-hf download robot-learning/Ex1_attempt_1 \
+cd ~/robot_learning_project/
+hf download robot-learning/Ex1_merged \
   --repo-type dataset \
-  --local-dir ex1_attempt_1
+  --local-dir data/ex1_merged
 ```
 
 Merge the dataset(s) into a single dataset (see `commands.md`).
@@ -70,7 +71,7 @@ Merge the dataset(s) into a single dataset (see `commands.md`).
 
 Run Video2World inference over the merged LeRobot dataset in three steps. All commands are run from the repo root.
 
-**1. Convert LeRobot to zarr and precompute T5 embeddings.** Uses the `lerobot` conda environment for the conversion and `mimic-video/model/.venv` for the embeddings.
+**1. Convert LeRobot to zarr and precompute T5 embeddings.** Uses the `lerobot` conda environment for the conversion and `mimic-video/model/.venv` for the embeddings. For proces_lerobot.sh, make sure that only the lerobot conda environment is on.
 
 ```bash
 ./scripts/process_lerobot.sh
