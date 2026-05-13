@@ -26,7 +26,11 @@ CHECKPOINT_DIR="${CHECKPOINT_DIR:-${MODEL_DIR}/checkpoints}"
 # ---- Arguments ------------------------------------------------------------
 EX_TYPE="${EX_TYPE:-ex1}"
 DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_merged}"
-EXPERIMENT="${EXPERIMENT:-v2w_${DATASET_NAME}_lora_rank256_lr1.778e-04_bsz32}"
+# LoRA rank — must be one of the values in `ranks` in
+# cosmos_predict2/configs/experiment/video2world.py. Lower rank = less capacity
+# (helps with overfitting)
+LORA_RANK="${LORA_RANK:-32}"
+EXPERIMENT="${EXPERIMENT:-v2w_${DATASET_NAME}_lora_rank${LORA_RANK}_lr1.778e-04_bsz32}"
 
 # The video backbone is loaded from
 #   ${CHECKPOINT_DIR}/video_backbone/v2w_pretrained_cosmos.pt
@@ -44,6 +48,9 @@ MAX_ITER="${MAX_ITER:-1000000}"      # author: 1_000_000
 LOGGING_ITER="${LOGGING_ITER:-1}" # author: 1_000
 GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-16}"  # author: 1
 TRAIN_LOCAL_BATCH_SIZE="${TRAIN_LOCAL_BATCH_SIZE:-2}" # author: 32
+# Checkpoint cadence (the upstream "boundary window" auto-save in
+# imaginaire/trainer.py has been removed, so this is the only schedule).
+SAVE_ITER="${SAVE_ITER:-5}"
 # Optional learning-rate override. Unset = use the experiment grid's LR
 # (encoded in the experiment name, e.g. 1.778e-04 for the default).
 LR="${LR:-}"
@@ -95,6 +102,7 @@ cd "${MODEL_DIR}"
 echo "=== Cosmos Video2World Finetuning ==="
 echo "Node:        $(hostname)"
 echo "Experiment:  ${EXPERIMENT}"
+echo "LoRA rank:   ${LORA_RANK}"
 echo "Video ckpt:  ${VIDEO_DIT_PATH}"
 echo "Output dir:  ${OUTPUT_DIR}"
 echo "WandB:       enabled=${WANDB_ENABLED}, project=${WANDB_PROJECT}, mode=${WANDB_MODE}"
@@ -102,6 +110,7 @@ echo "Nodes:       ${NNODES}"
 echo "GPUs/node:   ${GPUS_PER_NODE}"
 echo "Max iter:    ${MAX_ITER}"
 echo "Logging:     every ${LOGGING_ITER} iter"
+echo "Save:        every ${SAVE_ITER} iter"
 echo "Grad accum:  ${GRAD_ACCUM_ITER}"
 echo "Local bsz:   ${TRAIN_LOCAL_BATCH_SIZE:-<grid: global_bsz/world_size>}"
 echo "LR override: ${LR:-<none, use experiment grid LR>}"
@@ -128,6 +137,7 @@ torchrun \
        trainer.max_iter="${MAX_ITER}" \
        trainer.logging_iter="${LOGGING_ITER}" \
        trainer.grad_accum_iter="${GRAD_ACCUM_ITER}" \
+       checkpoint.save_iter="${SAVE_ITER}" \
        trainer.callbacks.wandb.enabled="${WANDB_ENABLED}" \
        trainer.callbacks.wandb.project="${WANDB_PROJECT}" \
        trainer.callbacks.wandb.entity="${WANDB_ENTITY}" \
