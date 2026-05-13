@@ -5,10 +5,14 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
 CONDA_ENV="${CONDA_ENV:-lerobot}"
-OUTPUT_DIR="${OUTPUT_DIR:-./runs/act_single_arm_$(date +%Y%m%d_%H%M%S)}"
-DATASET_SRC="${DATASET_SRC:-/cluster/home/samfoo/workspaces/robot_learning_project/data/20260428/record-test-merged}"
-DATASET_DST="${DATASET_DST:-${TMPDIR:-/tmp}/record-test-merged}"
+DATASET_NAME="${DATASET_NAME:-ex1_merged}"
+OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/runs/act_${DATASET_NAME}_$(date +%Y%m%d_%H%M%S)}"
+DATASET_SRC="${DATASET_SRC:-${REPO_ROOT}/data/${DATASET_NAME}}"
+DATASET_DST="${DATASET_DST:-${TMPDIR:-/tmp}/${DATASET_NAME}}"
 
 CONDA_BASE="${CONDA_BASE:-$(conda info --base 2>/dev/null || echo "${HOME}/miniconda3")}"
 source "${CONDA_BASE}/bin/activate"
@@ -33,14 +37,14 @@ echo "Dataset copy done."
 echo ""
 
 lerobot-train \
-  --dataset.repo_id="${HF_USER}/record-test-merged" \
+  --dataset.repo_id="${HF_USER}/${DATASET_NAME}" \
   --dataset.root="${DATASET_DST}" \
   --policy.type=act \
   --output_dir="${OUTPUT_DIR}" \
   --job_name=act_single_arm \
   --policy.device=cuda \
   --wandb.enable=true \
-  --policy.repo_id="${HF_USER}/act_policy" \
+  --policy.repo_id="${HF_USER}/act_${DATASET_NAME}" \
   --batch_size=16 \
 
 echo "=== Training Complete ==="
