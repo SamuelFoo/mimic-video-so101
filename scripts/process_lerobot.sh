@@ -20,7 +20,7 @@ DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_merged}"
 INPUT_DIR="${INPUT_DIR:-${DATA_ROOT}/${DATASET_NAME}}"
 OUTPUT_DIR="${OUTPUT_DIR:-${DATA_ROOT}/${DATASET_NAME}-zarr}"
 INSTRUCTIONS_JSON="${INSTRUCTIONS_JSON:-${REPO_ROOT}/config/language_instructions.json}"
-CHECKPOINT_DIR="${CHECKPOINT_DIR:-/cluster/work/rsl/samfoo/robot_learning/mimic-video/checkpoints}"
+CHECKPOINT_DIR="${CHECKPOINT_DIR:-${REPO_ROOT}/mimic-video/model/checkpoints}"
 CONDA_BASE="${CONDA_BASE:-$(conda info --base 2>/dev/null || echo "${HOME}/miniconda3")}"
 # ---------------------------------------------------------------------------
 

@@ -65,3 +65,20 @@ hf download robot-learning/Ex1_attempt_1 \
 ```
 
 Merge the dataset(s) into a single dataset (see `commands.md`).
+
+### Video Model Inference
+
+Run Video2World inference over the merged LeRobot dataset in three steps:
+
+```bash
+# Run from the repo root. This script converts LeRobot -> zarr in the `lerobot`
+# conda environment, then precomputes T5 embeddings in mimic-video/model/.venv.
+./scripts/process_lerobot.sh
+
+# Run from the repo root. This script exports existing zarr episodes to MP4
+# inputs and builds the Video2World batch JSON.
+./scripts/export_video_inputs.sh
+
+# Run from the repo root. This script uses mimic-video/model/.venv.
+./scripts/infer_video.sh
+```
