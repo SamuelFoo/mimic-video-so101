@@ -1,0 +1,3 @@
+{
+  "ex1": "Push a small object from left to right along a straight line. The start and end regions are marked by a white circle of 5 cm radius. The object must stay within the corridor marked by the white horizontal lines. Complete the task in as little pushes as possible. A push is counted every time the gripper makes contact with the object and then leaves it, regardless of whether the object moved."
+}

@@ -21,7 +21,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MODEL_DIR="${REPO_ROOT}/mimic-video/model"
-CHECKPOINT_DIR="${CHECKPOINT_DIR:-/cluster/work/rsl/samfoo/robot_learning/mimic-video/checkpoints}"
+CHECKPOINT_DIR="${CHECKPOINT_DIR:-${REPO_ROOT}/mimic-video/model/checkpoints}"
 
 EXPERIMENT="${EXPERIMENT:-w2a_lerobot_v2w_pretrained_cosmos_lr1.000e-04_layer20_bsz128}"
 
@@ -31,7 +31,7 @@ else
     VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/v2w_pretrained_cosmos.pt}"
 fi
 
-DATASET_SRC="${DATASET_SRC:-/cluster/scratch/samfoo/robot_learning/data/ex1_merged-zarr}"
+DATASET_SRC="${DATASET_SRC:-${REPO_ROOT}/data/ex1_merged-zarr}"
 DATASET_DST="${DATASET_DST:-${TMPDIR:-/tmp}/mimic_video_dataset}"
 export MIMIC_VIDEO_DATASET_DIR="${DATASET_DST}"
 

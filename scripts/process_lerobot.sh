@@ -11,16 +11,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MODEL_DIR="${REPO_ROOT}/mimic-video/model"
-CHECKPOINT_DIR="${CHECKPOINT_DIR:-/cluster/work/rsl/samfoo/robot_learning/mimic-video/checkpoints}"
 
+# ---- Arguments ------------------------------------------------------------
+EX_TYPE="${EX_TYPE:-ex1}"
 CONDA_ENV="${CONDA_ENV:-lerobot}"
-DATASET_NAME="${DATASET_NAME:-ex1_merged}"
-DATA_ROOT="${DATA_ROOT:-/cluster/scratch/samfoo/robot_learning/data}"
+DATA_ROOT="${DATA_ROOT:-${REPO_ROOT}/data}"
+DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_merged}"
 INPUT_DIR="${INPUT_DIR:-${DATA_ROOT}/${DATASET_NAME}}"
 OUTPUT_DIR="${OUTPUT_DIR:-${DATA_ROOT}/${DATASET_NAME}-zarr}"
-LANGUAGE_INSTRUCTION="${LANGUAGE_INSTRUCTION:-Push a small object from left to right along a straight line. The start and end regions are marked by a white circle of 5 cm radius. The object must stay within the corridor marked by the white horizontal lines. Complete the task in as little pushes as possible. A push is counted every time the gripper makes contact with the object and then leaves it, regardless of whether the object moved.}"
-
+INSTRUCTIONS_JSON="${INSTRUCTIONS_JSON:-${REPO_ROOT}/config/language_instructions.json}"
+CHECKPOINT_DIR="${CHECKPOINT_DIR:-/cluster/work/rsl/samfoo/robot_learning/mimic-video/checkpoints}"
 CONDA_BASE="${CONDA_BASE:-$(conda info --base 2>/dev/null || echo "${HOME}/miniconda3")}"
+# ---------------------------------------------------------------------------
+
+LANGUAGE_INSTRUCTION="$(python3 "${REPO_ROOT}/helpers/utils/language_instructions.py" "${EX_TYPE}" --instructions "${INSTRUCTIONS_JSON}")"
+
 source "${CONDA_BASE}/bin/activate"
 conda activate "${CONDA_ENV}"
 
@@ -29,6 +34,7 @@ export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
 echo "=== LeRobot -> zarr conversion ==="
 echo "Node:        $(hostname)"
 echo "Conda env:   ${CONDA_ENV}"
+echo "Ex type:     ${EX_TYPE}"
 echo "Dataset:     ${DATASET_NAME}"
 echo "Input dir:   ${INPUT_DIR}"
 echo "Output dir:  ${OUTPUT_DIR}"
