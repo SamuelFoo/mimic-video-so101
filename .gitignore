@@ -1,4 +1,8 @@
 so101/
 data/
-wandb
-runs
+wandb/
+runs/
+__pycache__/
+
+.claude
+.codex
