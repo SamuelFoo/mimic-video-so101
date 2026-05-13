@@ -26,6 +26,21 @@ if ! command -v uv >/dev/null; then
 fi
 (cd mimic-video/model && uv sync --extra cu126)
 
+# ---- 1b. Install Miniconda if conda is not available ------------------------
+if ! command -v conda >/dev/null; then
+    echo "==> conda not found — installing Miniconda"
+    MINICONDA_INSTALLER="$(mktemp -d)/Miniconda3-latest-Linux-x86_64.sh"
+    curl -fsSL -O --output-dir "$(dirname "${MINICONDA_INSTALLER}")" \
+        https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+    bash "${MINICONDA_INSTALLER}" -b -p "${HOME}/miniconda3"
+    rm "${MINICONDA_INSTALLER}"
+    # Make conda available in this shell session
+    # shellcheck source=/dev/null
+    source "${HOME}/miniconda3/etc/profile.d/conda.sh"
+    conda init bash
+    echo "  Miniconda installed at ${HOME}/miniconda3"
+fi
+
 # ---- 2. lerobot conda env: zarr<3 pin --------------------------------------
 echo "==> [2/5] Pin zarr<3 in lerobot conda env"
 if ! command -v conda >/dev/null; then
