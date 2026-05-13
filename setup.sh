@@ -38,6 +38,7 @@ if ! command -v conda >/dev/null; then
     # shellcheck source=/dev/null
     source "${HOME}/miniconda3/etc/profile.d/conda.sh"
     conda init bash
+    conda config --set auto_activate_base false
     echo "  Miniconda installed at ${HOME}/miniconda3"
 fi
 
