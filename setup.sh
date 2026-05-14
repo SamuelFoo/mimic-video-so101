@@ -15,6 +15,13 @@
 
 set -euo pipefail
 
+SETUP_LEROBOT=false
+for arg in "$@"; do
+    case "${arg}" in
+        --lerobot) SETUP_LEROBOT=true ;;
+    esac
+done
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${REPO_ROOT}"
 
@@ -42,19 +49,30 @@ if ! command -v conda >/dev/null; then
     echo "  Miniconda installed at ${HOME}/miniconda3"
 fi
 
-# ---- 2. lerobot conda env: zarr<3 pin --------------------------------------
-echo "==> [2/5] Pin zarr<3 in lerobot conda env"
-if ! command -v conda >/dev/null; then
+# ---- 2. lerobot conda env: create + zarr<3 pin -----------------------------
+echo "==> [2/5] Set up lerobot conda env"
+if [ "${SETUP_LEROBOT}" = false ]; then
+    echo "  Skipping (pass --lerobot to enable)."
+elif ! command -v conda >/dev/null; then
     echo "  conda not on PATH; skipping. After installing conda, run manually:"
-    echo "    conda activate lerobot && pip install 'zarr<3' 'numcodecs<0.16'"
-elif ! conda env list | awk 'NF && $1 !~ /^#/ {print $1}' | grep -qx lerobot; then
-    echo "  conda env 'lerobot' does not exist; skipping."
-    echo "  Create it via the lerobot HF setup guide, then re-run this script."
+    echo "    conda create -y -n lerobot python=3.12"
+    echo "    conda activate lerobot"
+    echo "    conda install ffmpeg -c conda-forge"
+    echo "    pip install lerobot 'zarr<3' 'numcodecs<0.16'"
 else
     # shellcheck source=/dev/null
     source "$(conda info --base)/etc/profile.d/conda.sh"
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+    if ! conda env list | awk 'NF && $1 !~ /^#/ {print $1}' | grep -qx lerobot; then
+        echo "  Creating lerobot conda env (python=3.12)"
+        conda create -y -n lerobot python=3.12
+    else
+        echo "  conda env 'lerobot' already exists, skipping create."
+    fi
     conda activate lerobot
-    pip install 'zarr<3' 'numcodecs<0.16'
+    conda install -y ffmpeg -c conda-forge
+    pip install lerobot 'zarr<3' 'numcodecs<0.16'
     conda deactivate
 fi
 
