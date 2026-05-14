@@ -15,10 +15,11 @@ EX_TYPE="${EX_TYPE:-ex1}"
 DATA_ROOT="${DATA_ROOT:-${REPO_ROOT}/data}"
 DATASET_NAME="${DATASET_NAME:-ex1_merged_2026-05-13_12-20-44}"
 RUN_DIR="${RUN_DIR:-${REPO_ROOT}/runs/video_inference/${DATASET_NAME}}"
-OUTPUT_DIR="${OUTPUT_DIR:-${RUN_DIR}/outputs}"
-BATCH_JSON="${BATCH_JSON:-${RUN_DIR}/batch.json}"
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-${REPO_ROOT}/mimic-video/model/checkpoints}"
-VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/v2w_pretrained_cosmos.pt}"
+VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${REPO_ROOT}/checkpoints/video/iter_000000375_fused.pt}"
+MODEL_NAME="${MODEL_NAME:-$(basename "${VIDEO_DIT_PATH}" .pt)}"
+OUTPUT_DIR="${OUTPUT_DIR:-${RUN_DIR}/outputs/${MODEL_NAME}}"
+BATCH_JSON="${BATCH_JSON:-${RUN_DIR}/batch.json}"
 NUM_CONDITIONAL_FRAMES="${NUM_CONDITIONAL_FRAMES:-5}"
 GUIDANCE="${GUIDANCE:-7}"
 SEED="${SEED:-0}"
@@ -47,10 +48,15 @@ if [[ ! -f "${BATCH_JSON}" ]]; then
   exit 1
 fi
 
+PATCHED_BATCH_JSON="$(mktemp --suffix=.json)"
+trap 'rm -f "${PATCHED_BATCH_JSON}"' EXIT
+sed "s|${RUN_DIR}/outputs/|${OUTPUT_DIR}/|g" "${BATCH_JSON}" > "${PATCHED_BATCH_JSON}"
+mkdir -p "${OUTPUT_DIR}"
+
 cd "${MODEL_DIR}"
 "${MODEL_PYTHON}" scripts/run_video2world.py \
   --dit_path "${VIDEO_DIT_PATH}" \
-  --batch_input_json "${BATCH_JSON}" \
+  --batch_input_json "${PATCHED_BATCH_JSON}" \
   --num_conditional_frames "${NUM_CONDITIONAL_FRAMES}" \
   --guidance "${GUIDANCE}" \
   --seed "${SEED}" \
