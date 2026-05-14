@@ -140,6 +140,7 @@ torchrun \
        trainer.logging_iter="${LOGGING_ITER}" \
        trainer.grad_accum_iter="${GRAD_ACCUM_ITER}" \
        checkpoint.save_iter="${SAVE_ITER}" \
+       optimizer.lr="${LR}" \
        trainer.callbacks.wandb.enabled="${WANDB_ENABLED}" \
        trainer.callbacks.wandb.project="${WANDB_PROJECT}" \
        trainer.callbacks.wandb.entity="${WANDB_ENTITY}" \
