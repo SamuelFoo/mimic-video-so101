@@ -5,6 +5,7 @@ Install dependencies (activate your lerobot conda env first):
     conda install pinocchio -c conda-forge
     pip install meshcat datasets
 """
+import argparse
 import json
 import time
 from pathlib import Path
@@ -61,17 +62,12 @@ def replay_kinematics_meshcat(dataset_id, urdf_path, mesh_dir, episode=0, fps=No
     print(f"Episode {episode} replay finished.")
 
 if __name__ == "__main__":
-    # --- Configuration ---
-    
-    # Replace with your actual Hugging Face repo ID or local path
-    DATASET_ID = "/home/nielsen/codes/Ex1_attempt_1" 
-    
-    # Path to the SO-101 URDF file
-    URDF_PATH = "isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf/so_arm101.urdf"
+    DATASET_ID = "/home/nielsen/codes/Ex1_attempt_1"
+    URDF_PATH  = "isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf/so_arm101.urdf"
+    MESH_DIR   = "isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf"
 
-    # Meshes are referenced as "assets/..." relative to the URDF, so point to the urdf/ folder
-    MESH_DIR = "isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf"
-    
-    EPISODE = 0  # Change to replay a different episode
+    parser = argparse.ArgumentParser(description="Replay SO-101 episode kinematics in Meshcat.")
+    parser.add_argument("--episode", type=int, default=0, help="Episode index to replay (default: 0)")
+    args = parser.parse_args()
 
-    replay_kinematics_meshcat(DATASET_ID, URDF_PATH, mesh_dir=MESH_DIR, episode=EPISODE)
+    replay_kinematics_meshcat(DATASET_ID, URDF_PATH, mesh_dir=MESH_DIR, episode=args.episode)
