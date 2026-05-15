@@ -23,17 +23,18 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MODEL_DIR="${REPO_ROOT}/mimic-video/model"
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-${REPO_ROOT}/mimic-video/model/checkpoints}"
 
-EXPERIMENT="${EXPERIMENT:-w2a_lerobot_v2w_pretrained_cosmos_lr1.000e-04_layer20_bsz128}"
+EXPERIMENT="${EXPERIMENT:-w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128}"
 
 if [[ "${EXPERIMENT}" == *"v2w_bridge_lora_rank256_lr1.778e-04_bsz64_iter_000070043_fused"* ]]; then
     VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/v2w_bridge_lora_rank256_lr1.778e-04_bsz64_iter_000070043_fused.pt}"
+elif [[ "${EXPERIMENT}" == *"iter_000000375_fused"* ]]; then
+    VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/iter_000000375_fused.pt}"
 else
     VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/v2w_pretrained_cosmos.pt}"
 fi
 
-DATASET_SRC="${DATASET_SRC:-${REPO_ROOT}/data/ex1_merged-zarr}"
-DATASET_DST="${DATASET_DST:-${TMPDIR:-/tmp}/mimic_video_dataset}"
-export MIMIC_VIDEO_DATASET_DIR="${DATASET_DST}"
+# MimicDataset finds episodes via glob("**/*.zarr") under MIMIC_VIDEO_DATASET_DIR
+export MIMIC_VIDEO_DATASET_DIR="${MIMIC_VIDEO_DATASET_DIR:-${REPO_ROOT}/data}"
 
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/runs/mimic_video/${EXPERIMENT}_$(date +%Y%m%d_%H%M%S)}"
 
@@ -44,17 +45,17 @@ WANDB_MODE="${WANDB_MODE:-online}"
 WANDB_LOG_EVERY_N="${WANDB_LOG_EVERY_N:-1}"
 WANDB_DIR="${WANDB_DIR:-${OUTPUT_DIR}/wandb}"
 
-MAX_VAL_ITER="${MAX_VAL_ITER:-null}"      # author: null (no cap); set to e.g. 8 to limit long validation at iter 0
+MAX_VAL_ITER="${MAX_VAL_ITER:-8}" # author: null (no cap); set to e.g. 8 to limit long validation at iter 0
 VAL_SHUFFLE="${VAL_SHUFFLE:-True}"
 VAL_NUM_SAMPLING_STEPS="${VAL_NUM_SAMPLING_STEPS:-12}"  # author: 12
 VAL_RUN_GENERATED_VIDEO="${VAL_RUN_GENERATED_VIDEO:-False}"
 
 # Action decoder architecture — author defaults from world2action_pipe.py.
-ACTION_MODEL_CHANNELS="${ACTION_MODEL_CHANNELS:-1024}"                           # author: 1024
-ACTION_MODEL_BLOCKS="${ACTION_MODEL_BLOCKS:-24}"                                 # author: 24
-ACTION_MODEL_HEADS="${ACTION_MODEL_HEADS:-8}"                                    # author: 8
-ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK="${ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK:-1024}"  # author: 1024
-ACTION_MODEL_ADALN_LORA_DIM="${ACTION_MODEL_ADALN_LORA_DIM:-128}"               # author: 128
+ACTION_MODEL_CHANNELS="${ACTION_MODEL_CHANNELS:-512}" # author: 1024
+ACTION_MODEL_BLOCKS="${ACTION_MODEL_BLOCKS:-12}" # author: 24
+ACTION_MODEL_HEADS="${ACTION_MODEL_HEADS:-8}" # author: 8
+ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK="${ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK:-512}" # author: 1024
+ACTION_MODEL_ADALN_LORA_DIM="${ACTION_MODEL_ADALN_LORA_DIM:-64}" # author: 128
 
 # Dataloader — author defaults from data_action.py.
 DATALOADER_NUM_WORKERS="${DATALOADER_NUM_WORKERS:-12}"           # author: 12
@@ -71,8 +72,8 @@ fi
 # Batch size — author grid uses global_bsz / world_size per GPU. For the
 # default bsz128 experiment on 1 GPU the local batch is 128; on 2 GPUs it
 # would be 64. Increase EXPERIMENT to a bsz256 variant when scaling up.
-TRAIN_LOCAL_BATCH_SIZE="${TRAIN_LOCAL_BATCH_SIZE:-128}"  # author: global_bsz / world_size (128 for bsz128 on 1 GPU)
-GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-1}"                  # author: 1
+TRAIN_LOCAL_BATCH_SIZE="${TRAIN_LOCAL_BATCH_SIZE:-32}" # author: global_bsz / world_size (128 for bsz128 on 1 GPU)
+GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-4}" # author: 1
 
 WANDB__SERVICE_WAIT="${WANDB__SERVICE_WAIT:-120}"
 WANDB_START_METHOD="${WANDB_START_METHOD:-thread}"
@@ -125,6 +126,7 @@ echo "Node:        $(hostname)"
 echo "Experiment:  ${EXPERIMENT}"
 echo "Checkpoints: ${CHECKPOINT_DIR}"
 echo "Video ckpt:  ${VIDEO_DIT_PATH}"
+echo "Dataset dir: ${MIMIC_VIDEO_DATASET_DIR}"
 echo "Output dir:  ${OUTPUT_DIR}"
 echo "WandB:       enabled=${WANDB_ENABLED}, project=${WANDB_PROJECT}, mode=${WANDB_MODE}"
 echo "Nodes:       ${NNODES}"
@@ -135,11 +137,6 @@ echo "Workers:     train=${DATALOADER_NUM_WORKERS}, val=${VAL_DATALOADER_NUM_WOR
 echo "Prefetch:    train=${DATALOADER_PREFETCH_FACTOR}"
 echo "Rendezvous:  ${MASTER_ADDR}:${MASTER_PORT}"
 echo
-
-echo "Staging dataset ${DATASET_SRC} -> ${DATASET_DST} ..."
-mkdir -p "${DATASET_DST}"
-rsync -a "${DATASET_SRC}/" "${DATASET_DST}/"
-echo "Dataset stage done."
 
 mkdir -p "${OUTPUT_DIR}"
 

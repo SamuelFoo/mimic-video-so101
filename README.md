@@ -122,3 +122,47 @@ Useful env-var overrides:
 - `WANDB_PROJECT=cosmos-video-finetune`, `WANDB_ENTITY=...`, `WANDB_MODE=offline`
 - `VIDEO_DIT_PATH=...` — start from a different video checkpoint
 - `GPUS_PER_NODE`, `NNODES`, `MASTER_PORT` for distributed training
+
+**Gotchas**
+
+- *Num_frames must be 1, 5, or 61.* Set in [data_video.py](mimic-video/model/cosmos_predict2/configs/defaults/data_video.py). Use 5 to speed up finetuning iteration.
+- *Batch size cannot exceed the number of generated videos.* If `bsz` (set in [video2world.py](mimic-video/model/cosmos_predict2/configs/experiment/video2world.py)) is larger than the dataset size, training errors out — pick a smaller experiment or generate more videos.
+
+### Mimic-Video Policy Training
+
+Trains the action decoder on top of a frozen video backbone. The decoder cross-attends to layer-20 hidden states from a frozen Cosmos-Predict2 2B DiT and predicts low-dim actions. All commands run from the repo root.
+
+**1. Convert LeRobot to zarr.** Same step as inference/finetuning — skip if already done.
+
+```bash
+./scripts/process_lerobot.sh
+```
+
+**2. Place a video backbone checkpoint.** The default experiment expects `mimic-video/model/checkpoints/video_backbone/iter_000000375_fused.pt`. Symlink or copy your fused video DiT there, or set `VIDEO_DIT_PATH=/abs/path.pt` when invoking the scripts below. The pretrained Cosmos checkpoint (`v2w_pretrained_cosmos.pt`) and the registered LoRA-fused variants in [world2action_model.py](mimic-video/model/cosmos_predict2/configs/defaults/world2action_model.py) also work — just pick a matching `EXPERIMENT`.
+
+**3. Precompute VAE latents (one-time, recommended).** Encodes every train + val sample's 61-frame raw video to `[16, 16, 60, 80]` latents and stores them under `${MIMIC_VIDEO_DATASET_DIR}/.latent_cache/` (default: `data/.latent_cache/`). The training step then loads latents via mmap and skips the per-step VAE encoder forward — the dominant memory hot-spot and a ~2-3× wall-clock saving. Cache is keyed by dataset config hash, so it auto-invalidates when the episode set or transforms change.
+
+```bash
+./scripts/precompute_video_latents.sh
+```
+
+With the default LeRobot config, samples are anchored at 5 Hz to match the author's effective video rate while avoiding one near-duplicate sample per raw 30 Hz camera frame.
+
+**4. Run training.** Default experiment is `w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128`, trained on the combined `ex1_merged + ex2_merged` zarr dirs.
+
+```bash
+./scripts/train_mimic_video.sh
+```
+
+Useful env-var overrides:
+
+- `EXPERIMENT=w2a_lerobot_<video_ckpt>_lr<...>_layer20_bsz<...>` — pick a different registered experiment (see [world2action.py](mimic-video/model/cosmos_predict2/configs/experiment/world2action.py))
+- `VIDEO_DIT_PATH=/abs/path.pt` — override the auto-resolved video backbone
+- `MIMIC_VIDEO_DATASET_DIR=/path/to/dir` — dir to glob `**/*.zarr` under (default `${REPO_ROOT}/data`). Both `.statistics_cache/` and `.latent_cache/` land inside it.
+- `TRAIN_LOCAL_BATCH_SIZE=16`, `GRAD_ACCUM_ITER=8` — per-GPU batch and accumulation; effective batch is product × world_size
+- `ACTION_MODEL_CHANNELS`, `ACTION_MODEL_BLOCKS`, `ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK`, `ACTION_MODEL_ADALN_LORA_DIM` — shrink the action decoder for tighter GPU budgets (the defaults are ~10× smaller than the author's reference config; see comments in [train_mimic_video.sh](scripts/train_mimic_video.sh))
+- `MAX_VAL_ITER=8` — cap the iter-0 validation pass; set to `null` for full validation
+- `WANDB_PROJECT=mimic-video`, `WANDB_ENTITY=...`, `WANDB_MODE=offline`
+- `GPUS_PER_NODE`, `NNODES`, `MASTER_PORT` for distributed training
+
+Runs land in `runs/mimic_video/<EXPERIMENT>_<TIMESTAMP>/`.
