@@ -32,6 +32,7 @@ if ! command -v uv >/dev/null; then
     exit 1
 fi
 (cd mimic-video/model && uv sync --extra cu126)
+(cd mimic-video/model && uv pip install -r "${REPO_ROOT}/deployment/requirements.txt")
 
 # ---- 1b. Install Miniconda if conda is not available ------------------------
 if ! command -v conda >/dev/null; then

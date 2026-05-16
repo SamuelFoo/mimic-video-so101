@@ -31,26 +31,25 @@ EXPERIMENT_NAME="${EXPERIMENT_NAME:-w2a_lerobot_iter_000000375_fused_lr1.000e-04
 
 # Video backbone — matches the iter_000000375_fused suffix on the experiment.
 VIDEO_MODEL_PATH="${VIDEO_MODEL_PATH:-${REPO_ROOT}/checkpoints/video/iter_000000375_fused.pt}"
+ACTION_MODEL_PATH="${ACTION_MODEL_PATH:-${REPO_ROOT}/checkpoints/action/iter_000001000.pt}"
 
-# Action decoder — newest checkpoint under runs/mimic_video unless overridden.
-if [[ -z "${ACTION_MODEL_PATH:-}" ]]; then
-  ACTION_MODEL_PATH="$(ls -t "${REPO_ROOT}"/runs/mimic_video/w2a_lerobot_*/vam/lerobot/*/checkpoints/model/iter_*.pt 2>/dev/null | head -n1 || true)"
-  if [[ -z "${ACTION_MODEL_PATH}" ]]; then
-    echo "ERROR: no trained action decoder found under ${REPO_ROOT}/runs/mimic_video/. " >&2
-    echo "Set ACTION_MODEL_PATH=/path/to/iter_NNN.pt explicitly." >&2
-    exit 1
-  fi
-fi
-
-# Dataset normalization stats — MimicDataset writes them under
-# ${MIMIC_VIDEO_DATASET_DIR}/.statistics_cache/<stats_id> at training time.
+# Dataset normalization stats — look first in ./checkpoints/ (where a trained
+# checkpoint bundle would include it), then fall back to the data cache written
+# by MimicDataset during training.
 MIMIC_VIDEO_DATASET_DIR_DEFAULT="${MIMIC_VIDEO_DATASET_DIR:-${REPO_ROOT}/data}"
+# Exported only so the lerobot dataloading yaml's `${oc.env:MIMIC_VIDEO_DATASET_DIR}`
+# interpolation resolves — the dataset itself is never instantiated at inference.
+export MIMIC_VIDEO_DATASET_DIR="${MIMIC_VIDEO_DATASET_DIR_DEFAULT}"
 if [[ -z "${DATASET_STATS:-}" ]]; then
-  DATASET_STATS="$(ls -t "${MIMIC_VIDEO_DATASET_DIR_DEFAULT}"/.statistics_cache/* 2>/dev/null | head -n1 || true)"
+  DATASET_STATS="$(ls -t "${REPO_ROOT}"/checkpoints/dataset_statistics.json 2>/dev/null | head -n1 || true)"
   if [[ -z "${DATASET_STATS}" ]]; then
-    echo "ERROR: no dataset statistics file found under " >&2
-    echo "  ${MIMIC_VIDEO_DATASET_DIR_DEFAULT}/.statistics_cache/  (run training to populate it)" >&2
-    echo "Set DATASET_STATS=/path/to/<hash> explicitly to override." >&2
+    DATASET_STATS="$(ls -t "${MIMIC_VIDEO_DATASET_DIR_DEFAULT}"/.statistics_cache/* 2>/dev/null | head -n1 || true)"
+  fi
+  if [[ -z "${DATASET_STATS}" ]]; then
+    echo "ERROR: no dataset statistics file found. Looked in:" >&2
+    echo "  ${REPO_ROOT}/checkpoints/dataset_statistics.json" >&2
+    echo "  ${MIMIC_VIDEO_DATASET_DIR_DEFAULT}/.statistics_cache/" >&2
+    echo "Copy the stats file from your training run or set DATASET_STATS=/path/to/file." >&2
     exit 1
   fi
 fi
@@ -64,9 +63,22 @@ FRAME_STRIDE="${FRAME_STRIDE:-1}"
 RESIZE_H="${RESIZE_H:-480}"
 RESIZE_W="${RESIZE_W:-640}"
 EXPECTED_STATE_DIM="${EXPECTED_STATE_DIM:-6}"
-STOP_AFTER_STEP="${STOP_AFTER_STEP:-}"
+STOP_AFTER_STEP="${STOP_AFTER_STEP:-10}"
+# Receding horizon — only this many of the 15-step chunk are returned to the
+# client before the server re-plans. Author's eval uses 5.
+NUM_EXECUTE_ACTIONS="${NUM_EXECUTE_ACTIONS:-15}"
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
+
+# Architecture is read from the config.yaml that lives next to the action
+# checkpoint (the same file HF saves with the checkpoint).
+ACTION_CONFIG_PATH="${ACTION_CONFIG_PATH:-$(dirname "${ACTION_MODEL_PATH}")/config.yaml}"
+
+# Set SAVE_VIDEOS=1 to dump an MP4 of the predicted future video to VIDEO_DIR
+# on every /infer call. Roughly doubles per-call latency; useful for debugging.
+SAVE_VIDEOS="${SAVE_VIDEOS:-0}"
+VIDEO_DIR="${VIDEO_DIR:-${REPO_ROOT}/visualizations}"
+VIDEO_FPS="${VIDEO_FPS:-5}"
 
 # ---- Env (mirrors scripts/infer_video.sh) ---------------------------------
 MODEL_PYTHON="${MODEL_DIR}/.venv/bin/python"
@@ -86,6 +98,14 @@ export PYTHONPATH="${MODEL_DIR}:${PYTHONPATH:-}"
 EXTRA_ARGS=()
 if [[ -n "${STOP_AFTER_STEP}" ]]; then
   EXTRA_ARGS+=("--stop-after-step" "${STOP_AFTER_STEP}")
+fi
+if [[ "${SAVE_VIDEOS}" != "0" && -n "${SAVE_VIDEOS}" ]]; then
+  EXTRA_ARGS+=("--save-videos")
+fi
+# CUDA graphs speed up the denoising loop. Matches eval/libero/run.py's default.
+USE_CUDA_GRAPHS="${USE_CUDA_GRAPHS:-1}"
+if [[ "${USE_CUDA_GRAPHS}" != "0" && -n "${USE_CUDA_GRAPHS}" ]]; then
+  EXTRA_ARGS+=("--use-cuda-graphs")
 fi
 
 echo "=== mimic-video inference server (LeRobot) ==="
@@ -109,6 +129,10 @@ exec "${MODEL_PYTHON}" "${SCRIPT_DIR}/serve_mimic_video.py" \
   --resize-h "${RESIZE_H}" \
   --resize-w "${RESIZE_W}" \
   --expected-state-dim "${EXPECTED_STATE_DIM}" \
+  --num-execute-actions "${NUM_EXECUTE_ACTIONS}" \
+  --action-config-path "${ACTION_CONFIG_PATH}" \
+  --video-dir "${VIDEO_DIR}" \
+  --video-fps "${VIDEO_FPS}" \
   --host "${HOST}" \
   --port "${PORT}" \
   "${EXTRA_ARGS[@]}"

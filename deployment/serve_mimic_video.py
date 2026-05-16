@@ -56,15 +56,59 @@ log = logging.getLogger("mimic-video-server")
 # Model loading
 # ---------------------------------------------------------------------------
 
+_NET_OVERRIDE_PREFIXES = ("world2action_pipe.net", "model.config.pipe_config.net")
+_SKIP_NET_KEYS = {"_target_", "sac_config"}  # _target_ is a class import; sac_config is a struct
+
+
+def _action_net_overrides(action_config_path: pathlib.Path) -> list[str]:
+    """Read `world2action_pipe.net.*` from the checkpoint's config.yaml and
+    return hydra-style override strings so the instantiated action decoder
+    matches the saved checkpoint's architecture (model_channels, num_blocks,
+    pair_timestep_feature_rank, etc.). Future arch tweaks land in the yaml
+    automatically — no need to touch this server."""
+    import yaml
+
+    # The training-time dump embeds `!!python/object/...` tags (e.g.
+    # TextEncoderClass) that SafeLoader rejects. We only need the scalar values
+    # under world2action_pipe.net, so silently ignore any Python-tagged node.
+    class _IgnorePyTagsLoader(yaml.SafeLoader):
+        pass
+
+    _IgnorePyTagsLoader.add_multi_constructor(
+        "tag:yaml.org,2002:python/", lambda loader, suffix, node: None,
+    )
+
+    with action_config_path.open() as f:
+        saved = yaml.load(f, Loader=_IgnorePyTagsLoader)
+    net_cfg = saved.get("world2action_pipe", {}).get("net", {})
+    overrides: list[str] = []
+    for key, value in net_cfg.items():
+        if key in _SKIP_NET_KEYS or not isinstance(value, (str, int, float, bool)):
+            continue
+        for prefix in _NET_OVERRIDE_PREFIXES:
+            overrides.append(f"{prefix}.{key}={value}")
+    return overrides
+
+
 def load_pipeline(
     experiment_name: str,
     video_model_path: str,
     action_model_path: str,
     dataset_statistics_path: pathlib.Path,
+    action_config_path: pathlib.Path | None,
     dtype: torch.dtype = torch.bfloat16,
 ) -> Video2World2ActionPipeline:
     config = make_config()
-    config = override(config, ["--", f"experiment={experiment_name}"])
+    overrides = ["--", f"experiment={experiment_name}"]
+    if action_config_path is not None and action_config_path.exists():
+        net_overrides = _action_net_overrides(action_config_path)
+        log.info(f"Applying {len(net_overrides) // len(_NET_OVERRIDE_PREFIXES)} "
+                 f"action-net overrides from {action_config_path}")
+        overrides.extend(net_overrides)
+    else:
+        log.warning(f"No action config.yaml at {action_config_path}; "
+                    "using experiment-default action-decoder architecture.")
+    config = override(config, overrides)
     config.model.config.video_pipe_config.guardrail_config.enabled = False
 
     video_pipe = Video2WorldPipeline.from_config(
@@ -207,11 +251,16 @@ def make_app(args: argparse.Namespace) -> FastAPI:
     def _load_model() -> None:
         log.info("Loading pipeline (this can take ~1 min)...")
         t0 = time.time()
+        action_config_path = (
+            pathlib.Path(args.action_config_path) if args.action_config_path
+            else pathlib.Path(args.action_model_path).parent / "config.yaml"
+        )
         state["pipeline"] = load_pipeline(
             experiment_name=args.experiment_name,
             video_model_path=args.video_model_path,
             action_model_path=args.action_model_path,
             dataset_statistics_path=pathlib.Path(args.dataset_statistics_path),
+            action_config_path=action_config_path,
         )
         log.info(f"Pipeline ready in {time.time() - t0:.1f}s on cuda:0.")
 
@@ -367,7 +416,11 @@ def _run_step(
 
     # If we still have unconsumed actions, return the next one without re-running the model.
     if session.action_buffer is not None and session.action_buffer_idx < session.action_buffer.shape[0]:
-        return _serialize_action_response(session, request_id, ran_model=False, infer_ms=0.0, return_full_chunk=return_full_chunk)
+        return _serialize_action_response(
+            session, request_id, ran_model=False, infer_ms=0.0,
+            return_full_chunk=return_full_chunk,
+            num_execute_actions=args.num_execute_actions,
+        )
 
     # Run the model (heavy: ~seconds of GPU work).
     images = session.build_input_video()  # (C, img_horizon, H, W)
@@ -375,6 +428,17 @@ def _run_step(
 
     input_vid = torch.from_numpy(images[None]).cuda().bfloat16()
     state_tensor = torch.from_numpy(lowdims[None]).cuda().bfloat16()
+
+    # Video2World2ActionPipeline requires stop_after_step to be set — the video
+    # backbone only returns the (crossattn_emb, video_sigma) tuple at that step.
+    # We use num_sampling_step - 1 (near-fully-denoised, last in-loop step):
+    # the post-loop "clean pass" branch in video2world.generate_video returns a
+    # 0-D sigma_min that crashes the caller's `.unsqueeze(1)`. The in-loop
+    # branch returns a 1-D sigma, which works. Lower it to trade quality for
+    # latency.
+    effective_stop = stop_after_step if stop_after_step is not None else args.stop_after_step
+    if effective_stop is None:
+        effective_stop = max(0, num_sampling_step - 1)
 
     t0 = time.time()
     with state["gpu_lock"]:
@@ -384,7 +448,7 @@ def _run_step(
                 state_B_HO_O=state_tensor,
                 prompt=prompt,
                 num_sampling_step=num_sampling_step,
-                stop_after_step=stop_after_step if stop_after_step is not None else args.stop_after_step,
+                stop_after_step=effective_stop,
                 seed=seed,
                 use_cuda_graphs=args.use_cuda_graphs,
             )
@@ -394,7 +458,128 @@ def _run_step(
     session.action_buffer_idx = 0
     log.info(f"[{request_id}] inference {infer_ms:.0f}ms → chunk {session.action_buffer.shape}")
 
-    return _serialize_action_response(session, request_id, ran_model=True, infer_ms=infer_ms, return_full_chunk=return_full_chunk)
+    if args.save_videos:
+        with state["gpu_lock"]:
+            video_path = _save_future_video(
+                pipeline, input_vid,
+                prompt=prompt,
+                num_sampling_step=num_sampling_step,
+                stop_after_step=effective_stop,
+                seed=seed,
+                use_cuda_graphs=args.use_cuda_graphs,
+                out_dir=pathlib.Path(args.video_dir),
+                fps=args.video_fps,
+                request_id=request_id,
+            )
+        log.info(f"[{request_id}] saved future video → {video_path}")
+
+    return _serialize_action_response(
+        session, request_id, ran_model=True, infer_ms=infer_ms,
+        return_full_chunk=return_full_chunk,
+        num_execute_actions=args.num_execute_actions,
+    )
+
+
+def _decode_video_at_step(
+    video_pipe,
+    input_vid: torch.Tensor,
+    *,
+    num_latent_conditional_frames: int,
+    prompt: str,
+    num_sampling_step: int,
+    stop_after_step: int,
+    seed: int,
+    use_cuda_graphs: bool,
+) -> torch.Tensor:
+    """Replicate `Video2WorldPipeline.generate_video` but return the decoded
+    video derived from `x0_pred` at iteration `stop_after_step` — i.e. the same
+    partially-denoised state the action decoder consumed. With `stop_after_step
+    == num_sampling_step - 1` this is very close to the fully denoised output;
+    with smaller values you get progressively noisier predictions."""
+    from imaginaire.utils import misc
+
+    data_batch = video_pipe._get_data_batch_input(
+        input_vid, prompt, None, "", num_latent_conditional_frames=num_latent_conditional_frames,
+    )
+    video_pipe._normalize_video_databatch_inplace(data_batch)
+    video_pipe._augment_image_dim_inplace(data_batch)
+    input_key = video_pipe.input_image_key if video_pipe.is_image_batch(data_batch) else video_pipe.input_video_key
+    n_sample = data_batch[input_key].shape[0]
+    _T, _H, _W = data_batch[input_key].shape[-3:]
+    state_shape = [
+        video_pipe.config.state_ch,
+        16,
+        _H // video_pipe.tokenizer.spatial_compression_factor,
+        _W // video_pipe.tokenizer.spatial_compression_factor,
+    ]
+    x0_fn = video_pipe.get_x0_fn_from_batch(
+        data_batch, guidance=0.0, is_negative_prompt=True, use_cuda_graphs=use_cuda_graphs,
+    )
+    sample = (
+        misc.arch_invariant_rand(
+            (n_sample, *tuple(state_shape)), torch.float32, video_pipe.tensor_kwargs["device"], seed,
+        )
+        * video_pipe.scheduler.config.sigma_max
+    ).to(dtype=torch.float32)
+    video_pipe.scheduler.set_timesteps(num_sampling_step, device=sample.device)
+    x0_prev = None
+    last_x0_pred = None
+    for i, _ in enumerate(video_pipe.scheduler.timesteps):
+        sigma_t = video_pipe.scheduler.sigmas[i].to(sample.device, dtype=torch.float32)
+        sigma_in = sigma_t.repeat(sample.shape[0])
+        x0_pred = x0_fn(sample, sigma_in, return_only_hidden_states_up_to=None)
+        last_x0_pred = x0_pred
+        if i == stop_after_step:
+            break
+        sample, x0_prev = video_pipe.scheduler.step(
+            x0_pred=x0_pred, i=i, sample=sample, x0_prev=x0_prev,
+        )
+    return video_pipe.decode(last_x0_pred)
+
+
+def _save_future_video(
+    pipeline: Video2World2ActionPipeline,
+    input_vid: torch.Tensor,
+    *,
+    prompt: str,
+    num_sampling_step: int,
+    stop_after_step: int,
+    seed: int,
+    use_cuda_graphs: bool,
+    out_dir: pathlib.Path,
+    fps: int,
+    request_id: str,
+) -> pathlib.Path:
+    """Decode the video at the same `stop_after_step` the action decoder used,
+    so the MP4 reflects what the action decoder actually conditioned on.
+    Roughly doubles per-call latency vs. action-only inference."""
+    import imageio.v2 as imageio
+
+    T = input_vid.shape[2]
+    with torch.no_grad():
+        video = _decode_video_at_step(
+            pipeline.video2world_pipeline,
+            input_vid,
+            num_latent_conditional_frames=1 if T == 1 else 2,
+            prompt=prompt,
+            num_sampling_step=num_sampling_step,
+            stop_after_step=stop_after_step,
+            seed=seed,
+            use_cuda_graphs=use_cuda_graphs,
+        )
+
+    frames = video[0].float().clamp(-1.0, 1.0).add(1.0).mul(127.5).byte().cpu().numpy()
+    frames = einops.rearrange(frames, "c t h w -> t h w c")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{time.strftime('%Y%m%d-%H%M%S')}-{request_id}.mp4"
+    writer = imageio.get_writer(str(out_path), fps=fps, macro_block_size=1)
+    try:
+        for frame in frames:
+            writer.append_data(frame)
+    finally:
+        writer.close()
+    return out_path
 
 
 def _serialize_action_response(
@@ -404,15 +589,27 @@ def _serialize_action_response(
     ran_model: bool,
     infer_ms: float,
     return_full_chunk: bool,
+    num_execute_actions: int,
 ) -> dict[str, Any]:
+    """Slice the cached action buffer for the response and trigger a re-plan
+    after `num_execute_actions` have been consumed — receding-horizon, matches
+    eval/libero/run.py and eval/bridge/.../video_action_model.py
+    (`num_execute_actions=5`).
+    """
     assert session.action_buffer is not None
+    chunk_len = session.action_buffer.shape[0]
+    execute_cap = min(num_execute_actions, chunk_len)
     if return_full_chunk:
-        actions = session.action_buffer[session.action_buffer_idx :].tolist()
-        # Mark the whole chunk as consumed so the next /infer triggers a re-plan.
-        session.action_buffer_idx = session.action_buffer.shape[0]
+        actions = session.action_buffer[session.action_buffer_idx : execute_cap].tolist()
+        # Force a re-plan on the next call.
+        session.action_buffer_idx = chunk_len
     else:
         actions = [session.action_buffer[session.action_buffer_idx].tolist()]
         session.action_buffer_idx += 1
+        if session.action_buffer_idx >= execute_cap:
+            # Mark buffer fully consumed so the next /infer re-plans, even
+            # though chunk has more steps. This is the receding-horizon trick.
+            session.action_buffer_idx = chunk_len
     return {
         "ok": True,
         "request_id": request_id,
@@ -420,7 +617,7 @@ def _serialize_action_response(
         "infer_ms": infer_ms,
         "actions": actions,
         "action_dim": session.action_buffer.shape[1],
-        "remaining_in_buffer": int(session.action_buffer.shape[0] - session.action_buffer_idx),
+        "remaining_in_buffer": int(chunk_len - session.action_buffer_idx),
     }
 
 
@@ -510,6 +707,23 @@ def parse_args() -> argparse.Namespace:
                    help="Validate inbound state vectors have this dim. 6 for SO-ARM-101. "
                         "Pass 0 (or any non-positive value) to disable the check.")
     p.add_argument("--use-cuda-graphs", action="store_true")
+    p.add_argument("--num-execute-actions", type=int, default=5,
+                   help="Receding horizon: only this many actions per 15-step chunk are exposed "
+                        "to the client before forcing a re-plan. Matches eval/libero/run.py and "
+                        "eval/bridge/.../video_action_model.py defaults.")
+    p.add_argument("--save-videos", action="store_true",
+                   help="On every /infer call, ALSO run the video2world backbone with full "
+                        "decoding and write an MP4 of the model's predicted future to --video-dir. "
+                        "Doubles per-call latency; intended for debugging the world model.")
+    p.add_argument("--video-dir", default="./visualizations",
+                   help="Where --save-videos writes MP4s.")
+    p.add_argument("--video-fps", type=int, default=5,
+                   help="MP4 framerate. Matches the policy's 5 Hz conditioning by default.")
+    p.add_argument("--action-config-path", default=None,
+                   help="Path to the training-time config.yaml saved alongside the action checkpoint. "
+                        "world2action_pipe.net.* values from this file override the experiment-default "
+                        "architecture so any future arch change (model_channels, num_blocks, ...) is picked "
+                        "up automatically. Defaults to <action-model-path's dir>/config.yaml.")
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8000)
     return p.parse_args()
