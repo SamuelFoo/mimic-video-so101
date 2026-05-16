@@ -1,12 +1,11 @@
 #!/bin/bash
 #
 # SLURM wrapper for scripts/train_mimic_video.sh.
-# Loads cluster modules, resolves the multi-node rendezvous endpoint, then
-# calls the standalone script via srun (one task per node). Each node stages
-# the dataset and launches its torchrun workers independently.
+# Loads cluster modules and translates the SLURM allocation into the env
+# vars the standalone script expects (NUM_GPUS). Single-node only.
 #
-# To scale up: increase --nodes and --gpus-per-node, then override EXPERIMENT
-# to a bsz that matches total GPU count.
+# To scale up: increase --gpus-per-node, then override EXPERIMENT to a bsz
+# that matches the GPU count.
 
 #SBATCH --job-name=train-mimic-video
 #SBATCH --output=/cluster/scratch/samfoo/slurm_runs/slurm-mimic-video-%j.out
@@ -26,16 +25,8 @@ module load eth_proxy
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Derive distributed config from SLURM environment and export so the
-# standalone script sees them.
-export NNODES="${SLURM_NNODES}"
-export GPUS_PER_NODE="$(echo "${SLURM_GPUS_PER_NODE:-1}" | tr -dc '0-9')"
-export MASTER_PORT="${MASTER_PORT:-12341}"
+# Translate the SLURM allocation into the generic vars the standalone
+# script reads.
+export NUM_GPUS="$(echo "${SLURM_GPUS_PER_NODE:-1}" | tr -dc '0-9')"
 
-# Resolve the head-node IP for the torchrun rendezvous endpoint.
-nodes_array=( $(scontrol show hostnames "$SLURM_JOB_NODELIST") )
-head_node="${nodes_array[0]}"
-export MASTER_ADDR="$(srun --nodes=1 --ntasks=1 -w "${head_node}" hostname --ip-address)"
-echo "Rendezvous endpoint: ${MASTER_ADDR}:${MASTER_PORT}"
-
-srun --nodes="${NNODES}" --ntasks-per-node=1 "${SCRIPT_DIR}/../scripts/train_mimic_video.sh"
+"${SCRIPT_DIR}/../scripts/train_mimic_video.sh"

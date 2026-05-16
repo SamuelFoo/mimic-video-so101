@@ -6,11 +6,11 @@
 #
 # Edit RUN_DIR below per run. RUN_DIR is the leaf containing checkpoints/,
 # config.pkl, config.yaml — for the train_mimic_video.sh layout that's:
-#   ${OUTPUT_DIR}/vam/lerobot/${EXPERIMENT}_${JOB_ID}
+#   ${OUTPUT_DIR}/vam/lerobot/${EXPERIMENT}
 
 set -euo pipefail
 
-RUN_DIR="/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128_20260514_213105/vam/lerobot/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128_880873"
+RUN_DIR="/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128_20260514_213105/vam/lerobot/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128"
 CKPT_DIR="$RUN_DIR/checkpoints"
 DATA_DIR="/ephemeral/robot_learning_project/staging/mimic-video"
 N_CHECKPOINTS=5

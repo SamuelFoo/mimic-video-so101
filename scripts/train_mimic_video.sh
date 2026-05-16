@@ -1,16 +1,11 @@
 #!/bin/bash
 #
-# Standalone training script for the mimic-video action decoder.
+# Training script for the mimic-video action decoder.
 # Runs on a single machine with one or more GPUs.
 #
-# Can also be invoked by slurm_scripts/train_mimic_video.sbatch for SLURM
-# multi-node runs — the sbatch wrapper sets MASTER_ADDR, NNODES, and
-# GPUS_PER_NODE before calling this script via srun.
-#
 # PIPELINE OVERVIEW
-#   1. Run scripts/process_lerobot.sh (or slurm_scripts/process_lerobot.sbatch)
-#      to convert your LeRobot v3 dataset to per-episode .zarr files with T5
-#      language embeddings.
+#   1. Run scripts/process_lerobot.sh to convert your LeRobot v3 dataset to
+#      per-episode .zarr files with T5 language embeddings.
 #   2. Run this script. Set EXPERIMENT to the auto-registered name from
 #      cosmos_predict2/configs/experiment/world2action.py for the "lerobot"
 #      data_config (the grid enumerates names of the form
@@ -80,16 +75,9 @@ GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-4}" # author: 1
 WANDB__SERVICE_WAIT="${WANDB__SERVICE_WAIT:-120}"
 WANDB_START_METHOD="${WANDB_START_METHOD:-thread}"
 
-# Distributed config. NNODES/MASTER_ADDR/GPUS_PER_NODE are exported by the
-# SLURM wrapper when running on a cluster. Single-machine defaults are 1 node,
-# localhost rendezvous, and all visible GPUs.
-NNODES="${NNODES:-${SLURM_NNODES:-1}}"
-MASTER_ADDR="${MASTER_ADDR:-localhost}"
-MASTER_PORT="${MASTER_PORT:-12341}"
-GPUS_PER_NODE="${GPUS_PER_NODE:-$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | wc -l || echo 1)}"
-
-# Job ID for naming — use SLURM job ID when available, else process ID.
-JOB_ID="${SLURM_JOB_ID:-$$}"
+# Single-node multi-GPU. Defaults to all visible GPUs; override NUM_GPUS to
+# pin a smaller subset.
+NUM_GPUS="${NUM_GPUS:-$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | wc -l || echo 1)}"
 
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${HOME}/.cache}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-${XDG_CACHE_HOME}/uv}"
@@ -131,23 +119,18 @@ echo "Video ckpt:  ${VIDEO_DIT_PATH}"
 echo "Dataset dir: ${MIMIC_VIDEO_DATASET_DIR}"
 echo "Output dir:  ${OUTPUT_DIR}"
 echo "WandB:       enabled=${WANDB_ENABLED}, project=${WANDB_PROJECT}, mode=${WANDB_MODE}"
-echo "Nodes:       ${NNODES}"
-echo "GPUs/node:   ${GPUS_PER_NODE}"
+echo "GPUs:        ${NUM_GPUS}"
 echo "Local batch: ${TRAIN_LOCAL_BATCH_SIZE}"
 echo "Grad accum:  ${GRAD_ACCUM_ITER}"
 echo "Workers:     train=${DATALOADER_NUM_WORKERS}, val=${VAL_DATALOADER_NUM_WORKERS}, stats=${MIMIC_STATS_NUM_WORKERS}"
 echo "Prefetch:    train=${DATALOADER_PREFETCH_FACTOR}"
-echo "Rendezvous:  ${MASTER_ADDR}:${MASTER_PORT}"
 echo
 
 mkdir -p "${OUTPUT_DIR}"
 
 torchrun \
-    --nnodes="${NNODES}" \
-    --nproc_per_node="${GPUS_PER_NODE}" \
-    --rdzv_id="${JOB_ID}" \
-    --rdzv_backend=c10d \
-    --rdzv_endpoint="${MASTER_ADDR}:${MASTER_PORT}" \
+    --standalone \
+    --nproc_per_node="${NUM_GPUS}" \
     -m scripts.train \
     --config=cosmos_predict2/configs/config.py \
     -- experiment="${EXPERIMENT}" \
@@ -178,6 +161,6 @@ torchrun \
        dataloader_train.prefetch_factor="${DATALOADER_PREFETCH_FACTOR}" \
        dataloader_train.persistent_workers="${DATALOADER_PERSISTENT_WORKERS}" \
        dataloader_val.num_workers="${VAL_DATALOADER_NUM_WORKERS}" \
-       job.name="${EXPERIMENT}_${JOB_ID}"
+       job.name="${EXPERIMENT}"
 
 echo "=== Training Complete ==="
