@@ -1,6 +1,7 @@
 so101/
 checkpoints/
 data/
+visualizations/
 wandb/
 runs/
 __pycache__/
