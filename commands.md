@@ -17,11 +17,23 @@ lerobot-train \
 
 ## Merge directly in robot-learning Team HF repo
 
+### Exercise 1
+
 ```bash
 lerobot-edit-dataset \
---new_repo_id robot-learning/Ex1_merged \
+--new_repo_id robot-learning/ex1_all \
 --operation.type merge \
---operation.repo_ids "['robot-learning/Ex1_attempt_1', 'robot-learning/Ex1_attempt_2', 'robot-learning/Ex1_attempt_3']" \
+--operation.repo_ids "['robot-learning/Ex1_merged', 'robot-learning/Ex1_PoV_merged', 'robot-learning/Ex1_PoV_dark_merged']" \
+--push_to_hub True
+```
+
+### Exercise 2
+
+```bash
+lerobot-edit-dataset \
+--new_repo_id robot-learning/ex2_all \
+--operation.type merge \
+--operation.repo_ids "['robot-learning/Ex2_merged', 'robot-learning/Ex2_PoV_merged', 'robot-learning/Ex2_PoV_dark_merged']" \
 --push_to_hub True
 ```
 
