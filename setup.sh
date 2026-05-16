@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-SETUP_LEROBOT=false
+SETUP_LEROBOT=true
 for arg in "$@"; do
     case "${arg}" in
         --lerobot) SETUP_LEROBOT=true ;;
@@ -101,7 +101,7 @@ echo "==> [4/5] Download Cosmos checkpoints"
 # ---- 5. Datasets ------------------------------------------------------------
 echo "==> [5/5] Download datasets"
 mkdir -p data
-for name in ex1_merged-cosmos-video ex2_merged-cosmos-video; do
+for name in ex1_all ex2_all; do
     target="data/${name}"
     if [ -d "${target}" ] && [ -n "$(ls -A "${target}" 2>/dev/null)" ]; then
         echo "  ${target} already populated, skipping."

@@ -30,6 +30,8 @@ fi
 
 # Must match train_mimic_video.sh — MimicDataset globs **/*.zarr under this dir.
 export MIMIC_VIDEO_DATASET_DIR="${MIMIC_VIDEO_DATASET_DIR:-${REPO_ROOT}/staging/mimic-video}"
+export LATENT_PRECOMPUTE_BATCH_SIZE="${LATENT_PRECOMPUTE_BATCH_SIZE:-10}"
+export LATENT_PRECOMPUTE_NUM_WORKERS="${LATENT_PRECOMPUTE_NUM_WORKERS:-12}"
 
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${HOME}/.cache}"
 export HF_HOME="${HF_HOME:-${XDG_CACHE_HOME}/huggingface}"
