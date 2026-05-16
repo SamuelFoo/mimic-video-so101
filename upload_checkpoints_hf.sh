@@ -22,10 +22,10 @@ pip install -q huggingface_hub hf_transfer
 export HF_HUB_ENABLE_HF_TRANSFER=1
 
 echo "==> Creating private repo: $HF_REPO"
-hf repo create "$RUN_NAME" \
+hf repos create "$HF_REPO" \
     --type model \
-    --organization "$HF_ORG" \
-    --private 2>&1 || echo "(repo may already exist, continuing)"
+    --private \
+    --exist-ok
 
 # Collect the last N unique iteration numbers from the model subdir
 mapfile -t ITERS < <(
