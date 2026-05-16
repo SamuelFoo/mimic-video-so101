@@ -15,6 +15,10 @@ Loop:
        plays. See the `num-execute` flag below if you want to re-plan more
        often than every full chunk (at the cost of more idle waits).
 
+Dependencies (in the lerobot conda env):
+    conda install pinocchio -c conda-forge
+    pip install meshcat
+
 Run (in the lerobot env, on the laptop):
     conda activate lerobot
     python deployment/run_so101_inference.py \\
@@ -41,6 +45,13 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
+try:
+    import pinocchio as pin
+    from pinocchio.visualize import MeshcatVisualizer
+    _PINOCCHIO_AVAILABLE = True
+except ImportError:
+    _PINOCCHIO_AVAILABLE = False
+
 # lerobot
 from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.robots.so_follower import SO101Follower
@@ -56,6 +67,25 @@ from client_mimic_video import MimicVideoClient  # noqa: E402
 # MimicDataset trained on.
 MOTOR_ORDER = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper")
 STATE_DIM = len(MOTOR_ORDER)
+
+
+_DEFAULT_URDF = "isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf/so_arm101.urdf"
+_DEFAULT_MESH_DIR = "isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf"
+
+
+def setup_meshcat(urdf_path: str, mesh_dir: str, repo_root: pathlib.Path):
+    if not _PINOCCHIO_AVAILABLE:
+        raise SystemExit("pinocchio not installed. Run: conda install pinocchio -c conda-forge && pip install meshcat")
+    urdf = pathlib.Path(urdf_path) if pathlib.Path(urdf_path).is_absolute() else repo_root / urdf_path
+    mesh = pathlib.Path(mesh_dir) if pathlib.Path(mesh_dir).is_absolute() else repo_root / mesh_dir
+    if not urdf.exists():
+        raise SystemExit(f"URDF not found: {urdf}\nHint: git submodule update --init --recursive")
+    model, col_model, vis_model = pin.buildModelsFromUrdf(str(urdf), str(mesh))
+    viz = MeshcatVisualizer(model, col_model, vis_model)
+    viz.initViewer(open=True)
+    viz.loadViewerModel()
+    print("MeshCat viewer ready — open the printed URL in a browser if it didn't open automatically.", file=sys.stderr)
+    return viz, model
 
 
 def load_prompt(args: argparse.Namespace, repo_root: pathlib.Path) -> str:
@@ -85,10 +115,29 @@ def state_from_obs(obs: dict[str, Any]) -> list[float]:
     return [float(obs[f"{m}.pos"]) for m in MOTOR_ORDER]
 
 
-def action_dict_from_vector(action: list[float] | np.ndarray) -> dict[str, float]:
+def action_dict_from_vector(action: list[float] | np.ndarray, *, reverse_model_joint_order: bool = False) -> dict[str, float]:
     if len(action) != STATE_DIM:
         raise RuntimeError(f"Server returned {len(action)}-D action; expected {STATE_DIM} for SO-101.")
+    if reverse_model_joint_order:
+        action = list(reversed(action))
     return {f"{m}.pos": float(v) for m, v in zip(MOTOR_ORDER, action)}
+
+
+def fmt_vec(values: list[float] | np.ndarray, precision: int = 1) -> str:
+    return "[" + ", ".join(f"{float(v):.{precision}f}" for v in values) + "]"
+
+
+def interpolate_actions(actions: np.ndarray, duration_s: float, rate_hz: float) -> np.ndarray:
+    """Linearly interpolate an action chunk over a fixed playback duration."""
+    if len(actions) <= 1 or rate_hz <= 0:
+        return actions
+    n_commands = max(2, int(round(duration_s * rate_hz)))
+    source_t = np.linspace(0.0, duration_s, len(actions), dtype=np.float32)
+    target_t = np.linspace(0.0, duration_s, n_commands, endpoint=False, dtype=np.float32)
+    return np.stack(
+        [np.interp(target_t, source_t, actions[:, dim]) for dim in range(actions.shape[1])],
+        axis=1,
+    ).astype(np.float32)
 
 
 def make_robot(args: argparse.Namespace) -> SO101Follower:
@@ -118,6 +167,11 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
     if not health.get("ok"):
         raise SystemExit(f"Server not ready: {health}")
 
+    viz = None
+    viz_model = None
+    if args.meshcat:
+        viz, viz_model = setup_meshcat(args.urdf_path, args.mesh_dir, repo_root)
+
     robot = make_robot(args)
     robot.connect()
     print(f"Connected to SO-101 on {args.port}", file=sys.stderr)
@@ -127,6 +181,9 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
 
     step_dt = 1.0 / args.chunk_rate_hz
     total_steps = 0
+    plan_idx = 0
+    prev_plan_state: np.ndarray | None = None
+    prev_plan_actions: np.ndarray | None = None
     stop_flag = {"value": False}
 
     def _handle_sigint(signum, frame):  # noqa: ARG001
@@ -142,7 +199,8 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
 
             # ---- Plan: query the server with the current observation -------
             obs = robot.get_observation()
-            state = state_from_obs(obs)
+            robot_state = state_from_obs(obs)
+            state = list(reversed(robot_state)) if args.reverse_joint_order else robot_state
             frame = obs[args.camera_key]
             if frame is None:
                 raise RuntimeError(f"Camera {args.camera_key!r} returned None — is the device free?")
@@ -150,6 +208,7 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
             jpeg = encode_frame_jpeg(frame, quality=args.jpeg_quality)
 
             t0 = time.perf_counter()
+            seed = args.seed if args.fixed_seed else args.seed + plan_idx
             resp = client.infer(
                 prompt=prompt,
                 state=state,
@@ -157,37 +216,88 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
                 return_full_chunk=True,
                 num_sampling_step=args.num_sampling_step,
                 stop_after_step=args.stop_after_step,
+                seed=seed,
             )
             rtt_ms = (time.perf_counter() - t0) * 1000.0
             actions = resp["actions"]
+            actions_np = np.asarray(actions, dtype=np.float32)
+            robot_actions_np = actions_np[:, ::-1] if args.reverse_joint_order else actions_np
             n_to_execute = min(args.num_execute, len(actions))
+            state_np = np.asarray(robot_state, dtype=np.float32)
+            state_delta = (
+                float(np.max(np.abs(state_np - prev_plan_state)))
+                if prev_plan_state is not None
+                else None
+            )
+            action_delta = (
+                float(np.mean(np.abs(robot_actions_np - prev_plan_actions)))
+                if prev_plan_actions is not None and prev_plan_actions.shape == robot_actions_np.shape
+                else None
+            )
+            action_step_delta = (
+                float(np.mean(np.abs(np.diff(robot_actions_np, axis=0))))
+                if len(robot_actions_np) > 1
+                else 0.0
+            )
             print(
-                f"[step {total_steps}] state={['%.1f' % s for s in state]} "
+                f"[step {total_steps}] seed={seed} state={fmt_vec(robot_state)} "
                 f"-> {len(actions)} actions ({rtt_ms:.0f} ms round-trip, "
                 f"server {resp['infer_ms']:.0f} ms, ran_model={resp['ran_model']}); "
                 f"executing {n_to_execute}",
                 file=sys.stderr,
             )
+            if args.reverse_joint_order:
+                print(f"  reverse-joint-order: sent model_state={fmt_vec(state)}", file=sys.stderr)
+            print(
+                f"  chunk first={fmt_vec(robot_actions_np[0])} last={fmt_vec(robot_actions_np[-1])} "
+                f"mean_step_delta={action_step_delta:.2f}"
+                + ("" if state_delta is None else f" state_delta_since_plan={state_delta:.2f}")
+                + ("" if action_delta is None else f" action_delta_since_plan={action_delta:.2f}"),
+                file=sys.stderr,
+            )
+            prev_plan_state = state_np
+            prev_plan_actions = robot_actions_np
+            plan_idx += 1
 
-            # ---- Execute: replay the first N actions at the policy rate ----
+            # ---- Execute: replay the first N actions over their trained duration ----
+            execution_actions = robot_actions_np[:n_to_execute]
+            playback_duration_s = n_to_execute * step_dt
+            command_rate_hz = args.interpolate_actions_hz or args.chunk_rate_hz
+            if command_rate_hz > args.chunk_rate_hz and n_to_execute > 1:
+                execution_actions = interpolate_actions(
+                    execution_actions,
+                    duration_s=playback_duration_s,
+                    rate_hz=command_rate_hz,
+                )
+                print(
+                    f"  interpolated {n_to_execute} anchors over {playback_duration_s:.1f}s "
+                    f"into {len(execution_actions)} commands at {command_rate_hz:.1f} Hz",
+                    file=sys.stderr,
+                )
+            else:
+                command_rate_hz = args.chunk_rate_hz
+
+            command_dt = 1.0 / command_rate_hz
             chunk_start = time.perf_counter()
-            for i in range(n_to_execute):
+            for i, robot_action in enumerate(execution_actions):
                 if stop_flag["value"]:
                     break
-                action = actions[i]
-                action_dict = action_dict_from_vector(action)
+                action_dict = action_dict_from_vector(robot_action)
                 if args.dry_run:
                     print(f"  dry-run action[{i}] = {action_dict}", file=sys.stderr)
                 else:
                     robot.send_action(action_dict)
+                if viz is not None and viz_model is not None:
+                    q = np.deg2rad(np.array(robot_action[:viz_model.nq]))
+                    viz.display(q)
 
                 total_steps += 1
                 if args.max_steps and total_steps >= args.max_steps:
                     break
 
-                # Pace to step_dt from the start of the chunk so jitter in
+                # Pace from the start of the chunk so jitter in
                 # individual send_action calls doesn't accumulate.
-                target_t = chunk_start + (i + 1) * step_dt
+                target_t = chunk_start + (i + 1) * command_dt
                 now = time.perf_counter()
                 if target_t > now:
                     time.sleep(target_t - now)
@@ -209,6 +319,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--robot-id", required=True, help="Calibration id (must match the id you teleoperated with)")
     p.add_argument("--max-relative-target", type=float, default=5.0,
                    help="Per-step max joint delta in degrees (safety). Set None to disable.")
+    p.add_argument("--reverse-joint-order", action="store_true",
+                   help="Experimental: send joint state to the model in reverse order and reverse model actions back before execution.")
 
     # Camera
     p.add_argument("--camera-key", default="front",
@@ -232,11 +344,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--num-sampling-step", type=int, default=35)
     p.add_argument("--stop-after-step", type=int, default=None,
                    help="Stop video denoising after this step (trade quality for latency)")
+    p.add_argument("--seed", type=int, default=0,
+                   help="Base diffusion seed. By default each new chunk uses seed + chunk_index.")
+    p.add_argument("--fixed-seed", action="store_true",
+                   help="Reuse --seed for every chunk for reproducible debugging.")
     p.add_argument("--jpeg-quality", type=int, default=90, help="JPEG quality for the frame upload (1-100)")
 
     # Loop control
     p.add_argument("--chunk-rate-hz", type=float, default=5.0,
                    help="Replay rate within each action chunk (matches the 5 Hz training target_frequency)")
+    p.add_argument("--interpolate-actions-hz", type=float, default=30.0,
+                   help="Command rate for linear interpolation between chunk actions. "
+                        "Set 0 or <= --chunk-rate-hz to send only the raw 5 Hz actions.")
     p.add_argument("--num-execute", type=int, default=15,
                    help="How many of the 15-step chunk to execute before re-planning. Lower = more re-plans, "
                         "more idle waits during inference; higher = less reactive.")
@@ -244,6 +363,14 @@ def parse_args() -> argparse.Namespace:
                    help="Stop after this many total actions sent. 0 = unlimited (Ctrl-C to stop).")
     p.add_argument("--dry-run", action="store_true",
                    help="Print actions but don't send them to the robot.")
+
+    # Visualization
+    p.add_argument("--meshcat", action="store_true",
+                   help="Open a MeshCat browser viewer and display each action as it executes.")
+    p.add_argument("--urdf-path", default=_DEFAULT_URDF,
+                   help="Path to SO-101 URDF (absolute or relative to repo root).")
+    p.add_argument("--mesh-dir", default=_DEFAULT_MESH_DIR,
+                   help="Mesh directory for the URDF (absolute or relative to repo root).")
     return p.parse_args()
 
 

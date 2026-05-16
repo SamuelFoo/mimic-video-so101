@@ -2,7 +2,7 @@
 
 ### Cloning Repo
 
-Clone repo and submodles. 
+Clone repo and submodles.
 
 ```bash
 git clone --recurse-submodules git@github.com:<project_url>
@@ -125,8 +125,8 @@ Useful env-var overrides:
 
 **Gotchas**
 
-- *Num_frames must be 1, 5, or 61.* Set in [data_video.py](mimic-video/model/cosmos_predict2/configs/defaults/data_video.py). Use 5 to speed up finetuning iteration.
-- *Batch size cannot exceed the number of generated videos.* If `bsz` (set in [video2world.py](mimic-video/model/cosmos_predict2/configs/experiment/video2world.py)) is larger than the dataset size, training errors out — pick a smaller experiment or generate more videos.
+- _Num_frames must be 1, 5, or 61._ Set in [data_video.py](mimic-video/model/cosmos_predict2/configs/defaults/data_video.py). Use 5 to speed up finetuning iteration.
+- _Batch size cannot exceed the number of generated videos._ If `bsz` (set in [video2world.py](mimic-video/model/cosmos_predict2/configs/experiment/video2world.py)) is larger than the dataset size, training errors out — pick a smaller experiment or generate more videos.
 
 ### Mimic-Video Policy Training
 
@@ -166,3 +166,16 @@ Useful env-var overrides:
 - `GPUS_PER_NODE`, `NNODES`, `MASTER_PORT` for distributed training
 
 Runs land in `runs/mimic_video/<EXPERIMENT>_<TIMESTAMP>/`.
+
+### Mimic-Video Inference
+
+```bash
+python deployment/run_so101_inference.py \
+  --port /dev/ttyACM0 \
+  --robot-id my_awesome_follower_arm \
+  --server http://localhost:8000 \
+  --prompt-key ex1 \
+  --max-relative-target 0 \
+  --camera-index 2 \
+  --meshcat
+```
