@@ -3,6 +3,7 @@ checkpoints/
 data/
 visualizations/
 wandb/
+staging/
 runs/
 __pycache__/
 
