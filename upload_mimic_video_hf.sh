@@ -12,7 +12,7 @@ set -euo pipefail
 
 RUN_DIR="/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128_20260514_213105/vam/lerobot/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128_880873"
 CKPT_DIR="$RUN_DIR/checkpoints"
-DATA_DIR="/ephemeral/robot_learning_project/data"
+DATA_DIR="/ephemeral/robot_learning_project/staging/mimic-video"
 N_CHECKPOINTS=5
 HF_ORG="robot-learning"
 CONDA_ENV="${CONDA_ENV:-lerobot}"
