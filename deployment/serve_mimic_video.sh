@@ -31,7 +31,7 @@ EXPERIMENT_NAME="${EXPERIMENT_NAME:-w2a_lerobot_iter_000000375_fused_lr1.000e-04
 
 # Video backbone — matches the iter_000000375_fused suffix on the experiment.
 VIDEO_MODEL_PATH="${VIDEO_MODEL_PATH:-${REPO_ROOT}/checkpoints/video/iter_000000375_fused.pt}"
-ACTION_MODEL_PATH="${ACTION_MODEL_PATH:-${REPO_ROOT}/checkpoints/action/iter_000001000.pt}"
+ACTION_MODEL_PATH="${ACTION_MODEL_PATH:-${REPO_ROOT}/checkpoints/action/iter_000002000.pt}"
 
 # Dataset normalization stats — look first in ./checkpoints/ (where a trained
 # checkpoint bundle would include it), then fall back to the data cache written
@@ -63,7 +63,7 @@ FRAME_STRIDE="${FRAME_STRIDE:-1}"
 RESIZE_H="${RESIZE_H:-480}"
 RESIZE_W="${RESIZE_W:-640}"
 EXPECTED_STATE_DIM="${EXPECTED_STATE_DIM:-6}"
-STOP_AFTER_STEP="${STOP_AFTER_STEP:-10}"
+STOP_AFTER_STEP="${STOP_AFTER_STEP:-1}"
 # Receding horizon — only this many of the 15-step chunk are returned to the
 # client before the server re-plans. Author's eval uses 5.
 NUM_EXECUTE_ACTIONS="${NUM_EXECUTE_ACTIONS:-15}"

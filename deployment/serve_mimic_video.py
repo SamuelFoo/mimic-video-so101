@@ -106,8 +106,11 @@ def load_pipeline(
                  f"action-net overrides from {action_config_path}")
         overrides.extend(net_overrides)
     else:
-        log.warning(f"No action config.yaml at {action_config_path}; "
-                    "using experiment-default action-decoder architecture.")
+        raise FileNotFoundError(
+            f"No action config.yaml found at {action_config_path}. "
+            "Copy the config.yaml from your training run next to the action checkpoint, "
+            "or set ACTION_CONFIG_PATH=/path/to/config.yaml."
+        )
     config = override(config, overrides)
     config.model.config.video_pipe_config.guardrail_config.enabled = False
 
@@ -140,26 +143,15 @@ def load_pipeline(
 
 
 # ---------------------------------------------------------------------------
-# Inference session (rolling image + state history, action buffer)
+# Inference session (state history and action buffer)
 # ---------------------------------------------------------------------------
 
 class InferenceSession:
-    """Holds rolling image/state history and a cached action buffer for one episode."""
+    """Holds low-dim state history and a cached action buffer for one episode."""
 
-    def __init__(
-        self,
-        img_horizon: int,
-        lowdim_horizon: int,
-        frame_stride: int,
-        resize_hw: tuple[int, int],
-    ):
-        self.img_horizon = img_horizon
+    def __init__(self, lowdim_horizon: int, resize_hw: tuple[int, int]):
         self.lowdim_horizon = lowdim_horizon
-        self.frame_stride = frame_stride
         self.resize_hw = resize_hw
-        # When stride > 1 we need stride*(img_horizon-1)+1 raw frames in flight.
-        self._raw_image_maxlen = frame_stride * (img_horizon - 1) + 1
-        self._image_history: collections.deque[np.ndarray] = collections.deque(maxlen=self._raw_image_maxlen)
         self._lowdim_history: collections.deque[np.ndarray] = collections.deque(maxlen=lowdim_horizon)
         self.prompt: str = ""
         self.action_buffer: np.ndarray | None = None
@@ -167,29 +159,14 @@ class InferenceSession:
 
     def reset(self, prompt: str) -> None:
         self.prompt = prompt
-        self._image_history.clear()
         self._lowdim_history.clear()
         self.action_buffer = None
         self.action_buffer_idx = 0
-
-    def add_image(self, frame_chw_1hw: np.ndarray) -> None:
-        self._image_history.append(frame_chw_1hw)
 
     def add_state(self, lowdim: np.ndarray) -> None:
         self._lowdim_history.append(lowdim)
         while len(self._lowdim_history) < self.lowdim_horizon:
             self._lowdim_history.append(lowdim.copy())
-
-    def build_input_video(self) -> np.ndarray:
-        """Return (C, img_horizon, H, W) by sampling history with frame_stride."""
-        if not self._image_history:
-            raise ValueError("No frames in history; call /reset and send at least one frame.")
-        if len(self._image_history) >= self._raw_image_maxlen:
-            picked = list(self._image_history)[:: self.frame_stride][-self.img_horizon :]
-        else:
-            # Not enough history yet: repeat the most recent frame.
-            picked = [self._image_history[-1]] * self.img_horizon
-        return np.concatenate(picked, axis=1)
 
     def build_input_state(self) -> np.ndarray:
         if not self._lowdim_history:
@@ -223,7 +200,8 @@ class InferRequest(BaseModel):
 
     prompt: str
     state: list[float]
-    image_b64: str  # base64-encoded JPEG or PNG
+    image_b64: str  # base64-encoded JPEG or PNG (most recent frame)
+    images_b64: list[str] | None = None  # optional: full frame history oldest→newest; bypasses server-side accumulation
     return_full_chunk: bool = True
     num_sampling_step: int = 35
     stop_after_step: int | None = None
@@ -238,9 +216,7 @@ def make_app(args: argparse.Namespace) -> FastAPI:
     state: dict[str, Any] = {
         "pipeline": None,
         "session": InferenceSession(
-            img_horizon=args.img_horizon,
             lowdim_horizon=args.lowdim_horizon,
-            frame_stride=args.frame_stride,
             resize_hw=(args.resize_h, args.resize_w),
         ),
         # Serialize GPU calls — one 2B-DiT forward at a time per process.
@@ -280,9 +256,7 @@ def make_app(args: argparse.Namespace) -> FastAPI:
             "experiment": args.experiment_name,
             "img_horizon": args.img_horizon,
             "lowdim_horizon": args.lowdim_horizon,
-            "frame_stride": args.frame_stride,
             "resize_hw": [args.resize_h, args.resize_w],
-            "session_frames": len(state["session"]._image_history),
             "session_states": len(state["session"]._lowdim_history),
             "buffered_actions": (
                 0 if state["session"].action_buffer is None
@@ -304,6 +278,12 @@ def make_app(args: argparse.Namespace) -> FastAPI:
             image_bytes = base64.b64decode(req.image_b64)
         except Exception as exc:
             raise HTTPException(400, f"Bad image_b64: {exc}") from exc
+        all_images_bytes = None
+        if req.images_b64 is not None:
+            try:
+                all_images_bytes = [base64.b64decode(b) for b in req.images_b64]
+            except Exception as exc:
+                raise HTTPException(400, f"Bad images_b64: {exc}") from exc
         return JSONResponse(_run_step(
             state, args, image_bytes, np.asarray(req.state, dtype=np.float32),
             prompt=req.prompt,
@@ -311,6 +291,7 @@ def make_app(args: argparse.Namespace) -> FastAPI:
             num_sampling_step=req.num_sampling_step,
             stop_after_step=req.stop_after_step,
             seed=req.seed,
+            all_images_bytes=all_images_bytes,
         ))
 
     @app.post("/infer_multipart")
@@ -391,6 +372,7 @@ def _run_step(
     num_sampling_step: int,
     stop_after_step: int | None,
     seed: int,
+    all_images_bytes: list[bytes] | None = None,
 ) -> dict[str, Any]:
     session: InferenceSession = state["session"]
     pipeline: Video2World2ActionPipeline = state["pipeline"]
@@ -408,8 +390,6 @@ def _run_step(
         log.info(f"Prompt changed → resetting session: {prompt!r}")
         session.reset(prompt)
 
-    frame_chw_1hw = decode_and_preprocess(image_bytes, session.resize_hw)
-    session.add_image(frame_chw_1hw)
     session.add_state(state_vec)
 
     request_id = uuid.uuid4().hex[:8]
@@ -423,7 +403,18 @@ def _run_step(
         )
 
     # Run the model (heavy: ~seconds of GPU work).
-    images = session.build_input_video()  # (C, img_horizon, H, W)
+    if all_images_bytes is not None:
+        if len(all_images_bytes) != args.img_horizon:
+            raise HTTPException(
+                400,
+                f"images_b64 must have exactly {args.img_horizon} frames, got {len(all_images_bytes)}",
+            )
+        frames = [decode_and_preprocess(b, session.resize_hw) for b in all_images_bytes]
+    else:
+        # Single-frame fallback (e.g. CLI client): repeat to fill the horizon.
+        single = decode_and_preprocess(image_bytes, session.resize_hw)
+        frames = [single] * args.img_horizon
+    images = np.concatenate(frames, axis=1)  # (C, img_horizon, H, W)
     lowdims = session.build_input_state()  # (lowdim_horizon, state_dim)
 
     input_vid = torch.from_numpy(images[None]).cuda().bfloat16()

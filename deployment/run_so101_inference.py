@@ -33,6 +33,7 @@ Ctrl-C disconnects cleanly.
 from __future__ import annotations
 
 import argparse
+import collections
 import io
 import json
 import os
@@ -186,6 +187,10 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
     prev_plan_actions: np.ndarray | None = None
     stop_flag = {"value": False}
 
+    frame_history: collections.deque[bytes] = collections.deque(maxlen=args.img_horizon)
+    last_frame_t: float = 0.0
+    frame_interval: float = 1.0 / args.frame_capture_hz
+
     def _handle_sigint(signum, frame):  # noqa: ARG001
         stop_flag["value"] = True
         print("\nCtrl-C received, finishing current step then disconnecting...", file=sys.stderr)
@@ -207,12 +212,15 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
 
             jpeg = encode_frame_jpeg(frame, quality=args.jpeg_quality)
 
+            images_bytes_list = list(frame_history) if len(frame_history) == args.img_horizon else None
+
             t0 = time.perf_counter()
             seed = args.seed if args.fixed_seed else args.seed + plan_idx
             resp = client.infer(
                 prompt=prompt,
                 state=state,
                 image_bytes=jpeg,
+                images_bytes=images_bytes_list,
                 return_full_chunk=True,
                 num_sampling_step=args.num_sampling_step,
                 stop_after_step=args.stop_after_step,
@@ -299,6 +307,18 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
                 # individual send_action calls doesn't accumulate.
                 target_t = chunk_start + (i + 1) * command_dt
                 now = time.perf_counter()
+
+                # Capture a frame at frame_capture_hz into the rolling history.
+                if now - last_frame_t >= frame_interval:
+                    try:
+                        cap_obs = robot.get_observation()
+                        cap_frame = cap_obs.get(args.camera_key)
+                        if cap_frame is not None:
+                            frame_history.append(encode_frame_jpeg(cap_frame, quality=args.jpeg_quality))
+                            last_frame_t = now
+                    except Exception as exc:
+                        print(f"  warn: frame capture failed: {exc}", file=sys.stderr)
+
                 if target_t > now:
                     time.sleep(target_t - now)
     finally:
@@ -349,6 +369,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--fixed-seed", action="store_true",
                    help="Reuse --seed for every chunk for reproducible debugging.")
     p.add_argument("--jpeg-quality", type=int, default=90, help="JPEG quality for the frame upload (1-100)")
+    p.add_argument("--img-horizon", type=int, default=5,
+                   help="Number of historical frames to send per inference call (must match server's img_horizon)")
+    p.add_argument("--frame-capture-hz", type=float, default=5.0,
+                   help="Rate at which frames are captured into the rolling history during action execution")
 
     # Loop control
     p.add_argument("--chunk-rate-hz", type=float, default=5.0,

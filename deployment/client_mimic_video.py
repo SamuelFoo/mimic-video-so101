@@ -73,16 +73,19 @@ class MimicVideoClient:
         state: list[float] | tuple[float, ...],
         image_bytes: bytes,
         *,
+        images_bytes: list[bytes] | None = None,
         return_full_chunk: bool = True,
         num_sampling_step: int = 35,
         stop_after_step: int | None = None,
         seed: int = 0,
     ) -> dict[str, Any]:
-        """POST a single frame + state to the server; return the action response.
+        """POST a frame + state to the server; return the action response.
 
         `state` should be a 6-D list of SO-ARM-101 joint angles in degrees.
-        `image_bytes` should be raw JPEG/PNG bytes (the server will decode and
-        resize to 480x640 itself).
+        `image_bytes` should be raw JPEG/PNG bytes of the most recent frame.
+        `images_bytes`, if provided, is the full frame history oldest→newest
+        (len must equal the server's img_horizon). When given, the server uses
+        these frames directly instead of its own rolling buffer.
         """
         body = {
             "prompt": prompt,
@@ -93,6 +96,8 @@ class MimicVideoClient:
             "stop_after_step": stop_after_step,
             "seed": seed,
         }
+        if images_bytes is not None:
+            body["images_b64"] = [base64.b64encode(b).decode("ascii") for b in images_bytes]
         r = self._session.post(
             f"{self.server}/infer",
             json=body,
