@@ -58,7 +58,7 @@ elif ! command -v conda >/dev/null; then
     echo "  conda not on PATH; skipping. After installing conda, run manually:"
     echo "    conda create -y -n lerobot python=3.12"
     echo "    conda activate lerobot"
-    echo "    conda install ffmpeg -c conda-forge"
+    echo "    conda install ffmpeg pinocchio -c conda-forge"
     echo "    pip install lerobot 'zarr<3' 'numcodecs<0.16'"
 else
     # shellcheck source=/dev/null
@@ -72,7 +72,7 @@ else
         echo "  conda env 'lerobot' already exists, skipping create."
     fi
     conda activate lerobot
-    conda install -y ffmpeg -c conda-forge
+    conda install -y ffmpeg pinocchio -c conda-forge
     pip install lerobot 'zarr<3' 'numcodecs<0.16'
     conda deactivate
 fi
