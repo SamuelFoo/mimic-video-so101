@@ -10,15 +10,23 @@
 
 set -euo pipefail
 
-RUN_DIR="/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128_20260514_213105/vam/lerobot/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128"
+RUN_DIR="/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128_20260517_111323/vam/lerobot/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128"
 CKPT_DIR="$RUN_DIR/checkpoints"
 DATA_DIR="/ephemeral/robot_learning_project/staging/mimic-video"
 N_CHECKPOINTS=5
 HF_ORG="robot-learning"
 CONDA_ENV="${CONDA_ENV:-lerobot}"
+# Set to "true" to also upload zarr datasets (training machines only).
+# .statistics_cache is always uploaded regardless (needed for inference).
+UPLOAD_DATA="${UPLOAD_DATA:-false}"
 
 RUN_NAME=$(basename "$RUN_DIR")
 HF_REPO="$HF_ORG/$RUN_NAME"
+
+# Mirror local layout on HF: place DATA_DIR under its path relative to the repo root
+# (e.g. /ephemeral/robot_learning_project/staging/mimic-video -> staging/mimic-video).
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DATA_REL="${DATA_DIR#"$REPO_ROOT/"}"
 
 echo "==> Activating conda environment: $CONDA_ENV"
 # shellcheck disable=SC1091
@@ -68,13 +76,25 @@ hf upload \
     --repo-type model \
     "${INCLUDE_ARGS[@]}"
 
-# Training data. .statistics_cache/ inside this tree is what
-# serve_mimic_video.sh falls back to for normalization stats.
-echo "==> Uploading training data from $DATA_DIR"
+# Always upload .statistics_cache — needed for inference normalization stats.
+echo "==> Uploading .statistics_cache from $DATA_DIR -> $DATA_REL"
 hf upload \
     "$HF_REPO" \
     "$DATA_DIR" \
-    data \
-    --repo-type model
+    "$DATA_REL" \
+    --repo-type model \
+    --include ".statistics_cache/**"
+
+if [[ "$UPLOAD_DATA" == "true" ]]; then
+    echo "==> Uploading zarr datasets from $DATA_DIR -> $DATA_REL"
+    hf upload \
+        "$HF_REPO" \
+        "$DATA_DIR" \
+        "$DATA_REL" \
+        --repo-type model \
+        --include "*-zarr/**"
+else
+    echo "==> Skipping zarr upload (UPLOAD_DATA=false)"
+fi
 
 echo "==> Done. View at: https://huggingface.co/$HF_REPO"
