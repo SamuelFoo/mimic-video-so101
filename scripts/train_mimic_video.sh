@@ -31,6 +31,7 @@ fi
 # MimicDataset finds episodes via glob("**/*.zarr") under MIMIC_VIDEO_DATASET_DIR
 export MIMIC_VIDEO_DATASET_DIR="${MIMIC_VIDEO_DATASET_DIR:-${REPO_ROOT}/staging/mimic-video}"
 
+# Set to existing dir to resume
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/runs/mimic_video/${EXPERIMENT}_$(date +%Y%m%d_%H%M%S)}"
 
 WANDB_ENABLED="${WANDB_ENABLED:-true}"
