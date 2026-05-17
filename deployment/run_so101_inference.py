@@ -164,9 +164,6 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
     client = MimicVideoClient(server=args.server or os.environ.get("MIMIC_VIDEO_SERVER", "http://localhost:8000"),
                               timeout=args.timeout)
     print(f"Server: {client.server}", file=sys.stderr)
-    health = client.health()
-    if not health.get("ok"):
-        raise SystemExit(f"Server not ready: {health}")
 
     viz = None
     viz_model = None
@@ -176,9 +173,6 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
     robot = make_robot(args)
     robot.connect()
     print(f"Connected to SO-101 on {args.port}", file=sys.stderr)
-
-    # Tell the server we're starting a fresh episode.
-    client.reset(prompt)
 
     step_dt = 1.0 / args.chunk_rate_hz
     total_steps = 0
@@ -206,12 +200,21 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
             obs = robot.get_observation()
             robot_state = state_from_obs(obs)
             state = list(reversed(robot_state)) if args.reverse_joint_order else robot_state
-            frame = obs[args.camera_key]
+
+            # Force a fresh camera read (not the background-thread cached frame
+            # from get_observation) so the last frame we send is captured as
+            # close to the request as possible.
+            cam = robot.cameras[args.camera_key]
+            frame = cam.read()
             if frame is None:
                 raise RuntimeError(f"Camera {args.camera_key!r} returned None — is the device free?")
 
             jpeg = encode_frame_jpeg(frame, quality=args.jpeg_quality)
 
+            # Record the freshly-captured frame into history just before sending
+            # the request so the server always sees the most up-to-date observation.
+            frame_history.append(jpeg)
+            last_frame_t = time.perf_counter()
             images_bytes_list = list(frame_history) if len(frame_history) == args.img_horizon else None
 
             t0 = time.perf_counter()

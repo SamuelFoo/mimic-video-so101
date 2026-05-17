@@ -47,25 +47,12 @@ DEFAULT_TIMEOUT_S = 600.0  # the 2B DiT can take a few seconds per chunk
 
 
 class MimicVideoClient:
-    """Thin HTTP client wrapping /healthz, /reset, /infer."""
+    """Thin HTTP client wrapping /infer."""
 
     def __init__(self, server: str = DEFAULT_SERVER, timeout: float = DEFAULT_TIMEOUT_S) -> None:
         self.server = server.rstrip("/")
         self.timeout = timeout
         self._session = requests.Session()
-
-    def health(self) -> dict[str, Any]:
-        r = self._session.get(f"{self.server}/healthz", timeout=self.timeout)
-        r.raise_for_status()
-        return r.json()
-
-    def reset(self, prompt: str) -> None:
-        r = self._session.post(
-            f"{self.server}/reset",
-            json={"prompt": prompt},
-            timeout=self.timeout,
-        )
-        r.raise_for_status()
 
     def infer(
         self,
@@ -143,7 +130,6 @@ def main() -> int:
     p.add_argument("--state", type=_parse_state, required=True,
                    help="JSON list of 6 joint angles in degrees, e.g. '[0,-90,90,0,0,30]'")
     p.add_argument("--prompt", required=True, help="Task description")
-    p.add_argument("--reset", action="store_true", help="Send /reset before /infer (clears server-side history)")
     p.add_argument("--return-next-only", action="store_true",
                    help="Ask for only the next action instead of the full 15-step chunk")
     p.add_argument("--num-sampling-step", type=int, default=35, help="Denoising steps (default 35)")
@@ -159,22 +145,8 @@ def main() -> int:
 
     print(f"Server: {server}", file=sys.stderr)
 
-    # Quick health check so misconfigured URLs fail loudly with a clear message.
-    try:
-        health = client.health()
-    except requests.exceptions.RequestException as exc:
-        print(f"ERROR: cannot reach {server}/healthz: {exc}", file=sys.stderr)
-        print("Hint: is the SSH tunnel up? Did you `./deployment/serve_mimic_video.sh` on the GPU box?", file=sys.stderr)
-        return 1
-    if not health.get("ok"):
-        print(f"Server reports not-ready: {health}", file=sys.stderr)
-        return 1
-
     image_bytes = _read_image_bytes(args.image)
     print(f"Sending {args.image.name} ({len(image_bytes) / 1024:.1f} KiB)", file=sys.stderr)
-
-    if args.reset:
-        client.reset(args.prompt)
 
     t0 = time.perf_counter()
     resp = client.infer(

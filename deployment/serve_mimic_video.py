@@ -1,4 +1,4 @@
-"""HTTP/WebSocket inference server for the full mimic-video pipeline.
+"""HTTP inference server for the full mimic-video pipeline.
 
 This server is wired for the LeRobot action space used by this project:
 both state and action are 6-D absolute joint angles (degrees) for SO-ARM-101,
@@ -19,7 +19,6 @@ Run via deployment/serve_mimic_video.sh (which sets the model venv + CUDA libs).
 from __future__ import annotations
 
 import argparse
-import asyncio
 import base64
 import collections
 import io
@@ -35,8 +34,8 @@ import einops
 import numpy as np
 import torch
 import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from PIL import Image
 from pydantic import BaseModel
 from torchvision import transforms
@@ -191,10 +190,6 @@ def decode_and_preprocess(image_bytes: bytes, resize_hw: tuple[int, int]) -> np.
 # FastAPI app
 # ---------------------------------------------------------------------------
 
-class ResetRequest(BaseModel):
-    prompt: str
-
-
 class InferRequest(BaseModel):
     """JSON body for /infer when sending base64-encoded frames."""
 
@@ -240,36 +235,6 @@ def make_app(args: argparse.Namespace) -> FastAPI:
         )
         log.info(f"Pipeline ready in {time.time() - t0:.1f}s on cuda:0.")
 
-    @app.get("/", response_class=HTMLResponse)
-    def index() -> str:
-        return _INDEX_HTML.format(
-            img_h=args.img_horizon,
-            lowdim_h=args.lowdim_horizon,
-            stride=args.frame_stride,
-            exp=args.experiment_name,
-        )
-
-    @app.get("/healthz")
-    def healthz() -> dict[str, Any]:
-        return {
-            "ok": state["pipeline"] is not None,
-            "experiment": args.experiment_name,
-            "img_horizon": args.img_horizon,
-            "lowdim_horizon": args.lowdim_horizon,
-            "resize_hw": [args.resize_h, args.resize_w],
-            "session_states": len(state["session"]._lowdim_history),
-            "buffered_actions": (
-                0 if state["session"].action_buffer is None
-                else int(state["session"].action_buffer.shape[0] - state["session"].action_buffer_idx)
-            ),
-        }
-
-    @app.post("/reset")
-    def reset(req: ResetRequest) -> dict[str, Any]:
-        state["session"].reset(req.prompt)
-        log.info(f"Reset session with prompt: {req.prompt!r}")
-        return {"ok": True}
-
     @app.post("/infer")
     def infer_json(req: InferRequest) -> JSONResponse:
         if state["pipeline"] is None:
@@ -293,66 +258,6 @@ def make_app(args: argparse.Namespace) -> FastAPI:
             seed=req.seed,
             all_images_bytes=all_images_bytes,
         ))
-
-    @app.post("/infer_multipart")
-    async def infer_multipart(
-        prompt: str,
-        state_json: str,
-        frame: UploadFile,
-        return_full_chunk: bool = True,
-        num_sampling_step: int = 35,
-        stop_after_step: int | None = None,
-        seed: int = 0,
-    ) -> JSONResponse:
-        """Alternative endpoint: upload the frame as multipart instead of base64."""
-        if state["pipeline"] is None:
-            raise HTTPException(503, "Pipeline still loading")
-        image_bytes = await frame.read()
-        state_vec = np.asarray(json.loads(state_json), dtype=np.float32)
-        return JSONResponse(_run_step(
-            state, args, image_bytes, state_vec,
-            prompt=prompt,
-            return_full_chunk=return_full_chunk,
-            num_sampling_step=num_sampling_step,
-            stop_after_step=stop_after_step,
-            seed=seed,
-        ))
-
-    @app.websocket("/ws")
-    async def ws_infer(ws: WebSocket) -> None:
-        await ws.accept()
-        peer = f"{ws.client.host}:{ws.client.port}" if ws.client else "unknown"
-        log.info(f"WS client connected: {peer}")
-        try:
-            while True:
-                msg = await ws.receive_text()
-                req = json.loads(msg)
-                op = req.get("op", "infer")
-                if op == "reset":
-                    state["session"].reset(req["prompt"])
-                    await ws.send_text(json.dumps({"ok": True, "op": "reset"}))
-                    continue
-                if op != "infer":
-                    await ws.send_text(json.dumps({"ok": False, "error": f"unknown op {op!r}"}))
-                    continue
-                if state["pipeline"] is None:
-                    await ws.send_text(json.dumps({"ok": False, "error": "pipeline still loading"}))
-                    continue
-                image_bytes = base64.b64decode(req["image_b64"])
-                state_vec = np.asarray(req["state"], dtype=np.float32)
-                # Run blocking inference in a thread so we don't stall the event loop.
-                result = await asyncio.to_thread(
-                    _run_step,
-                    state, args, image_bytes, state_vec,
-                    prompt=req["prompt"],
-                    return_full_chunk=req.get("return_full_chunk", True),
-                    num_sampling_step=req.get("num_sampling_step", 35),
-                    stop_after_step=req.get("stop_after_step"),
-                    seed=req.get("seed", 0),
-                )
-                await ws.send_text(json.dumps(result))
-        except WebSocketDisconnect:
-            log.info(f"WS client disconnected: {peer}")
 
     return app
 
@@ -610,68 +515,6 @@ def _serialize_action_response(
         "action_dim": session.action_buffer.shape[1],
         "remaining_in_buffer": int(chunk_len - session.action_buffer_idx),
     }
-
-
-# ---------------------------------------------------------------------------
-# A tiny landing page so you know the server is up
-# ---------------------------------------------------------------------------
-
-_INDEX_HTML = """<!doctype html>
-<html><head><title>mimic-video inference</title>
-<style>
-body{{font-family:system-ui,sans-serif;max-width:820px;margin:32px auto;padding:0 16px;color:#222}}
-code,pre{{background:#f4f4f4;padding:2px 6px;border-radius:4px}}
-pre{{padding:12px;overflow-x:auto}}
-</style></head>
-<body>
-<h1>mimic-video inference server (LeRobot)</h1>
-<p>Experiment: <code>{exp}</code> &middot; img_horizon=<code>{img_h}</code>
-   &middot; lowdim_horizon=<code>{lowdim_h}</code> &middot; frame_stride=<code>{stride}</code></p>
-
-<p><strong>Action space.</strong> State and actions are 6-D absolute joint angles in <em>degrees</em>
-(SO-ARM-101: 5 arm joints + gripper). The world2action pipeline applies the dataset-statistics
-normalizer internally, so the floats returned here are directly executable joint targets — feed them
-straight to your robot. The chunk has 15 timesteps at the policy's target frequency (5 Hz).</p>
-
-<h2>POST /reset</h2>
-<pre>{{ "prompt": "pick up the red block" }}</pre>
-<p>Clears image/state history and pins the task prompt. Also auto-triggered if <code>prompt</code> changes mid-session.</p>
-
-<h2>POST /infer  (application/json)</h2>
-<pre>{{
-  "prompt": "pick up the red block",
-  "state": [j1_deg, j2_deg, j3_deg, j4_deg, j5_deg, gripper_deg],
-  "image_b64": "...base64 JPEG/PNG of the workspace_rgb camera, will be resized to 480x640...",
-  "return_full_chunk": true
-}}</pre>
-<p>Returns:</p>
-<pre>{{
-  "ok": true,
-  "ran_model": true,
-  "infer_ms": 5400.0,
-  "actions": [[j1, j2, j3, j4, j5, gripper], ...],   // 15 rows of 6 joint-angle (deg) targets
-  "action_dim": 6,
-  "remaining_in_buffer": 0
-}}</pre>
-<p>The model only re-runs when the action buffer is exhausted; intermediate calls return cached
-actions instantly. Set <code>return_full_chunk=false</code> if you'd rather pull one action at a time.</p>
-
-<h2>POST /infer_multipart</h2>
-<p>Same as <code>/infer</code> but uploads the frame as multipart (<code>frame</code>) and the state as a JSON
-string (<code>state_json</code>). Useful from <code>curl -F</code>:</p>
-<pre>curl -F prompt='pick up the red block' \\
-     -F state_json='[0,-90,90,0,0,30]' \\
-     -F frame=@frame.jpg \\
-     http://&lt;host&gt;:8000/infer_multipart</pre>
-
-<h2>WebSocket /ws</h2>
-<pre>{{ "op": "reset", "prompt": "..." }}
-{{ "op": "infer", "prompt": "...", "state": [...6 floats...], "image_b64": "..." }}</pre>
-
-<h2>GET /healthz</h2>
-<p>Returns load status + current session counters.</p>
-</body></html>
-"""
 
 
 # ---------------------------------------------------------------------------
