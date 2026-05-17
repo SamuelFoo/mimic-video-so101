@@ -20,7 +20,8 @@ CONDA_ENV="${CONDA_ENV:-lerobot}"
 # .statistics_cache is always uploaded regardless (needed for inference).
 UPLOAD_DATA="${UPLOAD_DATA:-false}"
 
-RUN_NAME=$(basename "$RUN_DIR")
+# RUN_NAME is the timestamped run dir (3 levels up from EXPERIMENT in the train_mimic_video.sh layout).
+RUN_NAME=$(basename "$(dirname "$(dirname "$(dirname "$RUN_DIR")")")")
 HF_REPO="$HF_ORG/$RUN_NAME"
 
 # Mirror local layout on HF: place DATA_DIR under its path relative to the repo root
