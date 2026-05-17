@@ -36,7 +36,7 @@ ACTION_MODEL_PATH="${ACTION_MODEL_PATH:-${REPO_ROOT}/checkpoints/action/iter_000
 # Dataset normalization stats — look first in ./checkpoints/ (where a trained
 # checkpoint bundle would include it), then fall back to the data cache written
 # by MimicDataset during training.
-MIMIC_VIDEO_DATASET_DIR_DEFAULT="${MIMIC_VIDEO_DATASET_DIR:-${REPO_ROOT}/data}"
+MIMIC_VIDEO_DATASET_DIR_DEFAULT="${MIMIC_VIDEO_DATASET_DIR:-${REPO_ROOT}/staging/mimic-video}"
 # Exported only so the lerobot dataloading yaml's `${oc.env:MIMIC_VIDEO_DATASET_DIR}`
 # interpolation resolves — the dataset itself is never instantiated at inference.
 export MIMIC_VIDEO_DATASET_DIR="${MIMIC_VIDEO_DATASET_DIR_DEFAULT}"
