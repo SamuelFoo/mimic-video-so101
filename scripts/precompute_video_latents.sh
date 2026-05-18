@@ -18,15 +18,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MODEL_DIR="${REPO_ROOT}/mimic-video/model"
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-${REPO_ROOT}/mimic-video/model/checkpoints}"
 
-EXPERIMENT="${EXPERIMENT:-w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128}"
-
-if [[ "${EXPERIMENT}" == *"v2w_bridge_lora_rank256_lr1.778e-04_bsz64_iter_000070043_fused"* ]]; then
-    VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/v2w_bridge_lora_rank256_lr1.778e-04_bsz64_iter_000070043_fused.pt}"
-elif [[ "${EXPERIMENT}" == *"iter_000000375_fused"* ]]; then
-    VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/iter_000000375_fused.pt}"
-else
-    VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/v2w_pretrained_cosmos.pt}"
-fi
+EXPERIMENT="${EXPERIMENT:-w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128}"
 
 # Must match train_mimic_video.sh — MimicDataset globs **/*.zarr under this dir.
 export MIMIC_VIDEO_DATASET_DIR="${MIMIC_VIDEO_DATASET_DIR:-${REPO_ROOT}/staging/mimic-video}"
@@ -57,7 +49,6 @@ cd "${MODEL_DIR}"
 echo "=== Precompute VAE latents ==="
 echo "Node:        $(hostname)"
 echo "Experiment:  ${EXPERIMENT}"
-echo "Video ckpt:  ${VIDEO_DIT_PATH}"
 echo "Dataset:     ${MIMIC_VIDEO_DATASET_DIR}"
 echo
 
@@ -72,7 +63,6 @@ torchrun \
     --rdzv_endpoint="localhost:12342" \
     -m scripts.precompute_video_latents \
     --config=cosmos_predict2/configs/config.py \
-    -- experiment="${EXPERIMENT}" \
-       model.config.video_dit_path="${VIDEO_DIT_PATH}"
+    -- experiment="${EXPERIMENT}"
 
 echo "=== Done. Caches written under ${MIMIC_VIDEO_DATASET_DIR}/.latent_cache/ ==="
