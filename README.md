@@ -182,3 +182,7 @@ python deployment/run_so101_inference.py \
   --stop-after-step 0 \
   --meshcat
 ```
+
+Prompts are loaded from [config/deployment_prompts.json](config/deployment_prompts.json); select one with `--prompt-key` or override with `--prompt "..."`.
+
+A live camera window opens on the laptop by default — press **`r`** in that window to start/stop an MP4 recording (written to `recordings/so101_<timestamp>.mp4`).
