@@ -170,6 +170,8 @@ Runs land in `runs/mimic_video/<EXPERIMENT>_<TIMESTAMP>/`.
 ### Mimic-Video Inference
 
 ```bash
+ssh -L 8000:localhost:8000 infer-2
+
 python deployment/run_so101_inference.py \
   --port /dev/ttyACM0 \
   --robot-id my_awesome_follower_arm \
@@ -177,5 +179,6 @@ python deployment/run_so101_inference.py \
   --prompt-key ex1 \
   --max-relative-target 0 \
   --camera-index 2 \
+  --stop-after-step 0 \
   --meshcat
 ```

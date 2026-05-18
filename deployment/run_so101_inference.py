@@ -18,16 +18,6 @@ Loop:
 Dependencies (in the lerobot conda env):
     conda install pinocchio -c conda-forge
     pip install meshcat
-
-Run (in the lerobot env, on the laptop):
-    conda activate lerobot
-    python deployment/run_so101_inference.py \\
-        --port /dev/ttyACM0 \\
-        --robot-id my_awesome_follower_arm \\
-        --server http://gpu-box:8000 \\
-        --prompt-key ex1
-
-Ctrl-C disconnects cleanly.
 """
 
 from __future__ import annotations
@@ -92,7 +82,7 @@ def setup_meshcat(urdf_path: str, mesh_dir: str, repo_root: pathlib.Path):
 def load_prompt(args: argparse.Namespace, repo_root: pathlib.Path) -> str:
     if args.prompt:
         return args.prompt
-    instructions_path = args.instructions_json or (repo_root / "config" / "language_instructions.json")
+    instructions_path = args.instructions_json
     with open(instructions_path) as f:
         instructions = json.load(f)
     if args.prompt_key not in instructions:
@@ -358,15 +348,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--prompt", default=None, help="Override prompt text (else loaded from --instructions-json by key)")
     p.add_argument("--prompt-key", default="ex1",
                    help="Key into the instructions JSON (e.g. 'ex1', 'ex2')")
-    p.add_argument("--instructions-json", type=pathlib.Path, default=None,
-                   help="Path to language instructions JSON (default: <repo>/config/language_instructions.json)")
+    p.add_argument("--instructions-json", type=pathlib.Path,
+                   default=_HERE.parent / "config" / "deployment_prompts.json",
+                   help="Path to language instructions JSON")
 
     # Server
     p.add_argument("--server", default=None, help="Full server URL (else env MIMIC_VIDEO_SERVER or http://localhost:8000)")
     p.add_argument("--timeout", type=float, default=600.0, help="HTTP timeout seconds")
     p.add_argument("--num-sampling-step", type=int, default=35)
-    p.add_argument("--stop-after-step", type=int, default=None,
-                   help="Stop video denoising after this step (trade quality for latency)")
+    p.add_argument("--stop-after-step", type=int, default=1,
+                   help="Stop video denoising after this step (trade quality for latency). "
+                        "Sent on every /infer call so you can change it without restarting the server.")
     p.add_argument("--seed", type=int, default=0,
                    help="Base diffusion seed. By default each new chunk uses seed + chunk_index.")
     p.add_argument("--fixed-seed", action="store_true",

@@ -63,7 +63,6 @@ FRAME_STRIDE="${FRAME_STRIDE:-1}"
 RESIZE_H="${RESIZE_H:-480}"
 RESIZE_W="${RESIZE_W:-640}"
 EXPECTED_STATE_DIM="${EXPECTED_STATE_DIM:-6}"
-STOP_AFTER_STEP="${STOP_AFTER_STEP:-1}"
 # Receding horizon — only this many of the 15-step chunk are returned to the
 # client before the server re-plans. Author's eval uses 5.
 NUM_EXECUTE_ACTIONS="${NUM_EXECUTE_ACTIONS:-15}"
@@ -96,9 +95,6 @@ export COSMOS_PREDICT2_ARGS="${COSMOS_PREDICT2_ARGS:---checkpoints ${CHECKPOINT_
 export PYTHONPATH="${MODEL_DIR}:${PYTHONPATH:-}"
 
 EXTRA_ARGS=()
-if [[ -n "${STOP_AFTER_STEP}" ]]; then
-  EXTRA_ARGS+=("--stop-after-step" "${STOP_AFTER_STEP}")
-fi
 if [[ "${SAVE_VIDEOS}" != "0" && -n "${SAVE_VIDEOS}" ]]; then
   EXTRA_ARGS+=("--save-videos")
 fi
