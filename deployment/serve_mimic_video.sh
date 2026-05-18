@@ -29,7 +29,7 @@ CHECKPOINT_DIR="${MIMIC_VIDEO_CHECKPOINT_DIR:-${MODEL_DIR}/checkpoints}"
 # 'lerobot' data_config. The default below matches train_mimic_video.sh.
 EXPERIMENT_NAME="${EXPERIMENT_NAME:-w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128}"
 
-# Video backbone — matches the iter_000000375_fused suffix on the experiment.
+# Video backbone
 VIDEO_MODEL_PATH="${VIDEO_MODEL_PATH:-${REPO_ROOT}/checkpoints/video/iter_000000375_fused.pt}"
 ACTION_MODEL_PATH="${ACTION_MODEL_PATH:-${REPO_ROOT}/checkpoints/action/iter_000002000.pt}"
 
