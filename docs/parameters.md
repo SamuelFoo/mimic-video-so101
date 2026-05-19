@@ -50,12 +50,12 @@ These can be tuned in isolation without breaking the video pipeline:
 
 ## Workflow for shrinking `state_t` (e.g., 16 → 6)
 
-1. **V2W side** (Jonas's pipeline):
+1. **V2W side**:
    - Change `num_frames=21` in [`data_video.py`](../mimic-video/model/cosmos_predict2/configs/defaults/data_video.py).
    - Re-finetune V2W DiT with new `state_t=6` (architectural change to positional embeddings).
    - Publish new `iter_*_fused.pt` checkpoint.
 
-2. **Action decoder side** (your pipeline):
+2. **Action decoder side**:
    - Change `action.workspace_rgb.horizon: 56 → 16` in [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml).
    - Relax the VAE shim allowlist at [`precompute_video_latents.py:55`](../mimic-video/model/scripts/precompute_video_latents.py) (`{1, 5, 61}` → add the new T).
    - Update `LATENT_SHAPE` at [`precompute_video_latents.py:67`](../mimic-video/model/scripts/precompute_video_latents.py) to match new latent timesteps.
