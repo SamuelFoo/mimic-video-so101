@@ -46,6 +46,10 @@ VAL_SHUFFLE="${VAL_SHUFFLE:-True}"
 VAL_NUM_SAMPLING_STEPS="${VAL_NUM_SAMPLING_STEPS:-12}"  # author: 12
 VAL_RUN_GENERATED_VIDEO="${VAL_RUN_GENERATED_VIDEO:-False}"
 
+# lerobot.yaml has num_val_episodes: 0
+# skip validation to avoid iterating nothing.
+RUN_VALIDATION="${RUN_VALIDATION:-False}"
+
 SAVE_ITER="${SAVE_ITER:-50}"
 
 # Action decoder architecture — author defaults from world2action_pipe.py.
@@ -142,6 +146,7 @@ torchrun \
        trainer.callbacks.wandb.mode="${WANDB_MODE}" \
        trainer.callbacks.wandb.log_every_n="${WANDB_LOG_EVERY_N}" \
        trainer.max_val_iter="${MAX_VAL_ITER}" \
+       trainer.run_validation="${RUN_VALIDATION}" \
        checkpoint.save_iter="${SAVE_ITER}" \
        dataloader_val.sampler.shuffle="${VAL_SHUFFLE}" \
        model.config.validation_num_sampling_steps="${VAL_NUM_SAMPLING_STEPS}" \
