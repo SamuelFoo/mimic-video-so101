@@ -13,10 +13,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MODEL_DIR="${REPO_ROOT}/mimic-video/model"
 
 # ---- Arguments ------------------------------------------------------------
-EX_TYPE="${EX_TYPE:-ex1}"
+EX_TYPE="${EX_TYPE:-ex2}"
 CONDA_ENV="${CONDA_ENV:-lerobot}"
 DATA_ROOT="${DATA_ROOT:-${REPO_ROOT}/data}"
-DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_all}"
+DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_all_v3}"
 INPUT_DIR="${INPUT_DIR:-${DATA_ROOT}/${DATASET_NAME}}"
 OUTPUT_DIR="${OUTPUT_DIR:-${DATA_ROOT}/${DATASET_NAME}-zarr}"
 INSTRUCTIONS_JSON="${INSTRUCTIONS_JSON:-${REPO_ROOT}/config/language_instructions.json}"
