@@ -18,15 +18,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MODEL_DIR="${REPO_ROOT}/mimic-video/model"
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-${REPO_ROOT}/mimic-video/model/checkpoints}"
 
-EXPERIMENT="${EXPERIMENT:-w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128}"
-
-if [[ "${EXPERIMENT}" == *"v2w_bridge_lora_rank256_lr1.778e-04_bsz64_iter_000070043_fused"* ]]; then
-    VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/v2w_bridge_lora_rank256_lr1.778e-04_bsz64_iter_000070043_fused.pt}"
-elif [[ "${EXPERIMENT}" == *"iter_000000375_fused"* ]]; then
-    VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/iter_000000375_fused.pt}"
-else
-    VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/v2w_pretrained_cosmos.pt}"
-fi
+EXPERIMENT="${EXPERIMENT:-w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128}"
+VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/iter_000000610_fused.pt}"
 
 # MimicDataset finds episodes via glob("**/*.zarr") under MIMIC_VIDEO_DATASET_DIR
 export MIMIC_VIDEO_DATASET_DIR="${MIMIC_VIDEO_DATASET_DIR:-${REPO_ROOT}/staging/mimic-video}"
@@ -51,6 +44,11 @@ VAL_RUN_GENERATED_VIDEO="${VAL_RUN_GENERATED_VIDEO:-False}"
 RUN_VALIDATION="${RUN_VALIDATION:-False}"
 
 SAVE_ITER="${SAVE_ITER:-50}"
+
+# Warm-start: path to a model/iter_*.pt to initialize weights from.
+# Loads model weights only; optimizer/scheduler/iteration are reset.
+# Ignored if OUTPUT_DIR already contains a latest_checkpoint.txt (in-place resume wins).
+LOAD_PATH="${LOAD_PATH:-/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128_20260518_093904/vam/lerobot/w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128/checkpoints/model/iter_000002950.pt}"
 
 # Action decoder architecture — author defaults from world2action_pipe.py.
 ACTION_MODEL_CHANNELS="${ACTION_MODEL_CHANNELS:-512}" # author: 1024
@@ -148,6 +146,7 @@ torchrun \
        trainer.max_val_iter="${MAX_VAL_ITER}" \
        trainer.run_validation="${RUN_VALIDATION}" \
        checkpoint.save_iter="${SAVE_ITER}" \
+       checkpoint.load_path="${LOAD_PATH}" \
        dataloader_val.sampler.shuffle="${VAL_SHUFFLE}" \
        model.config.validation_num_sampling_steps="${VAL_NUM_SAMPLING_STEPS}" \
        model.config.validation_run_generated_video="${VAL_RUN_GENERATED_VIDEO}" \
