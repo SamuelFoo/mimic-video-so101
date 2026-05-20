@@ -170,6 +170,8 @@ Runs land in `runs/mimic_video/<EXPERIMENT>_<TIMESTAMP>/`.
 ### Mimic-Video Inference
 
 ```bash
+ssh -L 8000:localhost:8000 infer-2
+
 python deployment/run_so101_inference.py \
   --port /dev/ttyACM0 \
   --robot-id my_awesome_follower_arm \
@@ -177,5 +179,10 @@ python deployment/run_so101_inference.py \
   --prompt-key ex1 \
   --max-relative-target 0 \
   --camera-index 2 \
+  --stop-after-step 0 \
   --meshcat
 ```
+
+Prompts are loaded from [config/deployment_prompts.json](config/deployment_prompts.json); select one with `--prompt-key` or override with `--prompt "..."`.
+
+A live camera window opens on the laptop by default — press **`r`** in that window to start/stop an MP4 recording (written to `recordings/so101_<timestamp>.mp4`).

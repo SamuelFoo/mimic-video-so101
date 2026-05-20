@@ -37,6 +37,8 @@ export CUDA_HOME="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nv
 export CUDA_PATH="${CUDA_HOME}"
 export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc/lib:${LD_LIBRARY_PATH:-}"
 export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH:-}"
+# distributed.init() does ctypes.CDLL("libcudart.so") for the L2-fetch tweak.
+export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_runtime/lib:${LD_LIBRARY_PATH:-}"
 
 export COSMOS_PREDICT2_ARGS="${COSMOS_PREDICT2_ARGS:---checkpoints ${CHECKPOINT_DIR}}"
 
@@ -46,18 +48,23 @@ export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:T
 
 cd "${MODEL_DIR}"
 
+# torchrun is required because imaginaire's distributed.init() calls
+# init_process_group(init_method="env://"), which needs RANK / WORLD_SIZE /
+# MASTER_ADDR set even for single-GPU runs. NPROC_PER_NODE defaults to every
+# GPU on the node; set it explicitly to override.
+NPROC_PER_NODE="${NPROC_PER_NODE:-$(nvidia-smi -L 2>/dev/null | wc -l)}"
+NPROC_PER_NODE="${NPROC_PER_NODE:-1}"
+
 echo "=== Precompute VAE latents ==="
 echo "Node:        $(hostname)"
 echo "Experiment:  ${EXPERIMENT}"
 echo "Dataset:     ${MIMIC_VIDEO_DATASET_DIR}"
+echo "GPUs:        ${NPROC_PER_NODE}"
 echo
 
-# torchrun (with --nproc_per_node=1) is required because imaginaire's
-# distributed.init() calls init_process_group(init_method="env://"), which
-# needs RANK / WORLD_SIZE / MASTER_ADDR set even for single-GPU runs.
 torchrun \
     --nnodes=1 \
-    --nproc_per_node=1 \
+    --nproc_per_node="${NPROC_PER_NODE}" \
     --rdzv_id="precompute_$$" \
     --rdzv_backend=c10d \
     --rdzv_endpoint="localhost:12342" \

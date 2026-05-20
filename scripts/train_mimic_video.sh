@@ -18,15 +18,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MODEL_DIR="${REPO_ROOT}/mimic-video/model"
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-${REPO_ROOT}/mimic-video/model/checkpoints}"
 
-EXPERIMENT="${EXPERIMENT:-w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128}"
-
-if [[ "${EXPERIMENT}" == *"v2w_bridge_lora_rank256_lr1.778e-04_bsz64_iter_000070043_fused"* ]]; then
-    VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/v2w_bridge_lora_rank256_lr1.778e-04_bsz64_iter_000070043_fused.pt}"
-elif [[ "${EXPERIMENT}" == *"iter_000000375_fused"* ]]; then
-    VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/iter_000000375_fused.pt}"
-else
-    VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/v2w_pretrained_cosmos.pt}"
-fi
+EXPERIMENT="${EXPERIMENT:-w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128}"
+VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${CHECKPOINT_DIR}/video_backbone/iter_000000610_fused.pt}"
 
 # MimicDataset finds episodes via glob("**/*.zarr") under MIMIC_VIDEO_DATASET_DIR
 export MIMIC_VIDEO_DATASET_DIR="${MIMIC_VIDEO_DATASET_DIR:-${REPO_ROOT}/staging/mimic-video}"
@@ -46,9 +39,19 @@ VAL_SHUFFLE="${VAL_SHUFFLE:-True}"
 VAL_NUM_SAMPLING_STEPS="${VAL_NUM_SAMPLING_STEPS:-12}"  # author: 12
 VAL_RUN_GENERATED_VIDEO="${VAL_RUN_GENERATED_VIDEO:-False}"
 
+# lerobot.yaml has num_val_episodes: 0
+# skip validation to avoid iterating nothing.
+RUN_VALIDATION="${RUN_VALIDATION:-False}"
+
 SAVE_ITER="${SAVE_ITER:-50}"
 
+# Warm-start: path to a model/iter_*.pt to initialize weights from.
+# Loads model weights only; optimizer/scheduler/iteration are reset.
+# Ignored if OUTPUT_DIR already contains a latest_checkpoint.txt (in-place resume wins).
+LOAD_PATH="${LOAD_PATH:-/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128_20260518_093904/vam/lerobot/w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128/checkpoints/model/iter_000002950.pt}"
+
 # Action decoder architecture — author defaults from world2action_pipe.py.
+XATTN_VIDEO_PREFIX_LENGTH="${XATTN_VIDEO_PREFIX_LENGTH:-8}" # null = full 16 latent timesteps; set to e.g. 8 to slice
 ACTION_MODEL_CHANNELS="${ACTION_MODEL_CHANNELS:-512}" # author: 1024
 ACTION_MODEL_BLOCKS="${ACTION_MODEL_BLOCKS:-12}" # author: 24
 ACTION_MODEL_HEADS="${ACTION_MODEL_HEADS:-8}" # author: 8
@@ -71,7 +74,7 @@ fi
 # default bsz128 experiment on 1 GPU the local batch is 128; on 2 GPUs it
 # would be 64. Increase EXPERIMENT to a bsz256 variant when scaling up.
 TRAIN_LOCAL_BATCH_SIZE="${TRAIN_LOCAL_BATCH_SIZE:-32}" # author: global_bsz / world_size (128 for bsz128 on 1 GPU)
-GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-4}" # author: 1
+GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-2}" # author: 1
 
 WANDB__SERVICE_WAIT="${WANDB__SERVICE_WAIT:-120}"
 WANDB_START_METHOD="${WANDB_START_METHOD:-thread}"
@@ -100,9 +103,15 @@ source "${MODEL_DIR}/.venv/bin/activate"
 export PATH="/sbin:/usr/sbin:${PATH}"
 export CUDA_HOME="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc"
 export CUDA_PATH="${CUDA_HOME}"
-export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc/lib:${LD_LIBRARY_PATH:-}"
-export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH:-}"
+_CUDA_RUNTIME_LIB="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_runtime/lib"
+# dlopen("libcudart.so") needs the unversioned name; create symlink if missing
+if [[ -f "${_CUDA_RUNTIME_LIB}/libcudart.so.12" && ! -e "${_CUDA_RUNTIME_LIB}/libcudart.so" ]]; then
+    ln -sf libcudart.so.12 "${_CUDA_RUNTIME_LIB}/libcudart.so"
+fi
+export LD_LIBRARY_PATH="${_CUDA_RUNTIME_LIB}:${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH}"
 echo "NVRTC lib path: ${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc/lib"
+echo "CUDART lib path: ${_CUDA_RUNTIME_LIB}"
 
 export COSMOS_PREDICT2_ARGS="${COSMOS_PREDICT2_ARGS:---checkpoints ${CHECKPOINT_DIR}}"
 
@@ -142,7 +151,9 @@ torchrun \
        trainer.callbacks.wandb.mode="${WANDB_MODE}" \
        trainer.callbacks.wandb.log_every_n="${WANDB_LOG_EVERY_N}" \
        trainer.max_val_iter="${MAX_VAL_ITER}" \
+       trainer.run_validation="${RUN_VALIDATION}" \
        checkpoint.save_iter="${SAVE_ITER}" \
+       checkpoint.load_path="${LOAD_PATH}" \
        dataloader_val.sampler.shuffle="${VAL_SHUFFLE}" \
        model.config.validation_num_sampling_steps="${VAL_NUM_SAMPLING_STEPS}" \
        model.config.validation_run_generated_video="${VAL_RUN_GENERATED_VIDEO}" \
@@ -158,6 +169,8 @@ torchrun \
        model.config.pipe_config.net.num_heads="${ACTION_MODEL_HEADS}" \
        model.config.pipe_config.net.pair_timestep_feature_rank="${ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK}" \
        model.config.pipe_config.net.adaln_lora_dim="${ACTION_MODEL_ADALN_LORA_DIM}" \
+       world2action_pipe.xattn_video_prefix_length="${XATTN_VIDEO_PREFIX_LENGTH}" \
+       model.config.pipe_config.xattn_video_prefix_length="${XATTN_VIDEO_PREFIX_LENGTH}" \
        dataloader_train.num_workers="${DATALOADER_NUM_WORKERS}" \
        dataloader_train.prefetch_factor="${DATALOADER_PREFETCH_FACTOR}" \
        dataloader_train.persistent_workers="${DATALOADER_PERSISTENT_WORKERS}" \

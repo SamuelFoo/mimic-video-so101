@@ -16,9 +16,9 @@ MODEL_DIR="${REPO_ROOT}/mimic-video/model"
 MODEL_PYTHON="${MODEL_DIR}/.venv/bin/python"
 
 # ---- Arguments ------------------------------------------------------------
-EX_TYPE="${EX_TYPE:-ex1}"
+EX_TYPE="${EX_TYPE:-ex3}"
 DATA_ROOT="${DATA_ROOT:-${REPO_ROOT}/data}"
-DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_merged}"
+DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_all}"
 ZARR_DIR="${ZARR_DIR:-${DATA_ROOT}/${DATASET_NAME}-zarr}"
 FINETUNE_DATA_DIR="${FINETUNE_DATA_DIR:-${DATA_ROOT}/${DATASET_NAME}-cosmos-video}"
 INSTRUCTIONS_JSON="${INSTRUCTIONS_JSON:-${REPO_ROOT}/config/language_instructions.json}"

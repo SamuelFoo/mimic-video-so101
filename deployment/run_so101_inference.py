@@ -18,16 +18,6 @@ Loop:
 Dependencies (in the lerobot conda env):
     conda install pinocchio -c conda-forge
     pip install meshcat
-
-Run (in the lerobot env, on the laptop):
-    conda activate lerobot
-    python deployment/run_so101_inference.py \\
-        --port /dev/ttyACM0 \\
-        --robot-id my_awesome_follower_arm \\
-        --server http://gpu-box:8000 \\
-        --prompt-key ex1
-
-Ctrl-C disconnects cleanly.
 """
 
 from __future__ import annotations
@@ -43,6 +33,7 @@ import sys
 import time
 from typing import Any
 
+import cv2
 import numpy as np
 from PIL import Image
 
@@ -74,6 +65,107 @@ _DEFAULT_URDF = "isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf/so_ar
 _DEFAULT_MESH_DIR = "isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf"
 
 
+class DisplayRecorder:
+    """Live camera preview with a single-key toggle for MP4 recording.
+
+    `show(frame_rgb)` is called every time the laptop reads a frame; pressing
+    `record_key` (default `r`) starts/stops writing the displayed frames to
+    `record_dir/so101_<timestamp>.mp4` at the camera's capture fps.
+    """
+
+    def __init__(
+        self,
+        *,
+        enabled: bool,
+        window_name: str,
+        record_dir: pathlib.Path,
+        fps: float,
+        record_key: str,
+    ) -> None:
+        self.enabled = enabled
+        self.window_name = window_name
+        self.history_window_name = f"{window_name} — sent frames"
+        self.record_dir = record_dir
+        self.fps = max(1.0, float(fps))
+        self.record_key = (record_key or "r")[:1].lower()
+        self._writer: cv2.VideoWriter | None = None
+        self._record_path: pathlib.Path | None = None
+        if self.enabled:
+            cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+            cv2.namedWindow(self.history_window_name, cv2.WINDOW_NORMAL)
+            print(
+                f"Display on. Press '{self.record_key}' in the camera window to "
+                f"start/stop recording (saved to {self.record_dir}/).",
+                file=sys.stderr,
+            )
+
+    def show(self, frame_rgb: np.ndarray) -> None:
+        if not self.enabled or frame_rgb is None:
+            return
+        bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+        if self._writer is not None:
+            self._writer.write(bgr)
+            cv2.circle(bgr, (18, 18), 8, (0, 0, 255), -1)
+            cv2.putText(bgr, "REC", (32, 24), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6, (0, 0, 255), 2, cv2.LINE_AA)
+        cv2.imshow(self.window_name, bgr)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord(self.record_key):
+            self._toggle(bgr.shape[:2])
+
+    def show_history(self, jpeg_list: list[bytes]) -> None:
+        """Decode the JPEG history that's about to be sent to the server and
+        display it as a horizontal strip (oldest → newest, left → right)."""
+        if not self.enabled or not jpeg_list:
+            return
+        target_h = 180
+        tiles = []
+        for idx, b in enumerate(jpeg_list):
+            arr = np.frombuffer(b, dtype=np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if img is None:
+                continue
+            h, w = img.shape[:2]
+            img = cv2.resize(img, (int(w * target_h / h), target_h))
+            label = f"t-{len(jpeg_list) - 1 - idx}" if idx < len(jpeg_list) - 1 else "t (now)"
+            cv2.putText(img, label, (8, 22), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6, (0, 255, 255), 2, cv2.LINE_AA)
+            tiles.append(img)
+        if not tiles:
+            return
+        sep = np.full((target_h, 4, 3), 255, dtype=np.uint8)
+        pieces: list[np.ndarray] = []
+        for i, tile in enumerate(tiles):
+            if i > 0:
+                pieces.append(sep)
+            pieces.append(tile)
+        strip = np.concatenate(pieces, axis=1)
+        cv2.imshow(self.history_window_name, strip)
+        cv2.waitKey(1)
+
+    def _toggle(self, frame_hw: tuple[int, int]) -> None:
+        if self._writer is None:
+            self.record_dir.mkdir(parents=True, exist_ok=True)
+            self._record_path = self.record_dir / f"so101_{time.strftime('%Y%m%d-%H%M%S')}.mp4"
+            h, w = frame_hw
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            self._writer = cv2.VideoWriter(str(self._record_path), fourcc, self.fps, (w, h))
+            print(f"Recording → {self._record_path}", file=sys.stderr)
+        else:
+            self._writer.release()
+            print(f"Saved recording → {self._record_path}", file=sys.stderr)
+            self._writer = None
+            self._record_path = None
+
+    def close(self) -> None:
+        if self._writer is not None:
+            self._writer.release()
+            print(f"Saved recording → {self._record_path}", file=sys.stderr)
+            self._writer = None
+        if self.enabled:
+            cv2.destroyAllWindows()
+
+
 def setup_meshcat(urdf_path: str, mesh_dir: str, repo_root: pathlib.Path):
     if not _PINOCCHIO_AVAILABLE:
         raise SystemExit("pinocchio not installed. Run: conda install pinocchio -c conda-forge && pip install meshcat")
@@ -92,7 +184,7 @@ def setup_meshcat(urdf_path: str, mesh_dir: str, repo_root: pathlib.Path):
 def load_prompt(args: argparse.Namespace, repo_root: pathlib.Path) -> str:
     if args.prompt:
         return args.prompt
-    instructions_path = args.instructions_json or (repo_root / "config" / "language_instructions.json")
+    instructions_path = args.instructions_json
     with open(instructions_path) as f:
         instructions = json.load(f)
     if args.prompt_key not in instructions:
@@ -174,6 +266,15 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
     robot.connect()
     print(f"Connected to SO-101 on {args.port}", file=sys.stderr)
 
+    record_dir = args.record_dir if args.record_dir.is_absolute() else repo_root / args.record_dir
+    display = DisplayRecorder(
+        enabled=args.display,
+        window_name=f"SO-101 [{args.camera_key}]",
+        record_dir=record_dir,
+        fps=args.camera_fps,
+        record_key=args.record_key,
+    )
+
     step_dt = 1.0 / args.chunk_rate_hz
     total_steps = 0
     plan_idx = 0
@@ -209,6 +310,7 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
             if frame is None:
                 raise RuntimeError(f"Camera {args.camera_key!r} returned None — is the device free?")
 
+            display.show(frame)
             jpeg = encode_frame_jpeg(frame, quality=args.jpeg_quality)
 
             # Record the freshly-captured frame into history just before sending
@@ -216,6 +318,7 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
             frame_history.append(jpeg)
             last_frame_t = time.perf_counter()
             images_bytes_list = list(frame_history) if len(frame_history) == args.img_horizon else None
+            display.show_history(list(frame_history))
 
             t0 = time.perf_counter()
             seed = args.seed if args.fixed_seed else args.seed + plan_idx
@@ -317,6 +420,7 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
                         cap_obs = robot.get_observation()
                         cap_frame = cap_obs.get(args.camera_key)
                         if cap_frame is not None:
+                            display.show(cap_frame)
                             frame_history.append(encode_frame_jpeg(cap_frame, quality=args.jpeg_quality))
                             last_frame_t = now
                     except Exception as exc:
@@ -325,6 +429,10 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
                 if target_t > now:
                     time.sleep(target_t - now)
     finally:
+        try:
+            display.close()
+        except Exception as exc:  # pragma: no cover
+            print(f"Warning: display.close() raised: {exc}", file=sys.stderr)
         try:
             robot.disconnect()
         except Exception as exc:  # pragma: no cover
@@ -353,20 +461,29 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--camera-height", type=int, default=480)
     p.add_argument("--camera-fps", type=int, default=30,
                    help="Camera capture fps. The model conditions at 5 Hz; capture fps just needs to be high enough.")
+    p.add_argument("--display", action=argparse.BooleanOptionalAction, default=True,
+                   help="Show the live camera feed in an OpenCV window. "
+                        "Press the record key (default 'r') in the window to toggle MP4 recording.")
+    p.add_argument("--record-key", default="r",
+                   help="Single character that toggles recording when the camera window is focused.")
+    p.add_argument("--record-dir", type=pathlib.Path, default=pathlib.Path("recordings"),
+                   help="Where MP4 recordings are written (absolute, or relative to the repo root).")
 
     # Prompt
     p.add_argument("--prompt", default=None, help="Override prompt text (else loaded from --instructions-json by key)")
     p.add_argument("--prompt-key", default="ex1",
                    help="Key into the instructions JSON (e.g. 'ex1', 'ex2')")
-    p.add_argument("--instructions-json", type=pathlib.Path, default=None,
-                   help="Path to language instructions JSON (default: <repo>/config/language_instructions.json)")
+    p.add_argument("--instructions-json", type=pathlib.Path,
+                   default=_HERE.parent / "config" / "deployment_prompts.json",
+                   help="Path to language instructions JSON")
 
     # Server
     p.add_argument("--server", default=None, help="Full server URL (else env MIMIC_VIDEO_SERVER or http://localhost:8000)")
     p.add_argument("--timeout", type=float, default=600.0, help="HTTP timeout seconds")
     p.add_argument("--num-sampling-step", type=int, default=35)
-    p.add_argument("--stop-after-step", type=int, default=None,
-                   help="Stop video denoising after this step (trade quality for latency)")
+    p.add_argument("--stop-after-step", type=int, default=1,
+                   help="Stop video denoising after this step (trade quality for latency). "
+                        "Sent on every /infer call so you can change it without restarting the server.")
     p.add_argument("--seed", type=int, default=0,
                    help="Base diffusion seed. By default each new chunk uses seed + chunk_index.")
     p.add_argument("--fixed-seed", action="store_true",

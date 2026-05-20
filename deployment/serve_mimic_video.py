@@ -327,14 +327,12 @@ def _run_step(
 
     # Video2World2ActionPipeline requires stop_after_step to be set — the video
     # backbone only returns the (crossattn_emb, video_sigma) tuple at that step.
-    # We use num_sampling_step - 1 (near-fully-denoised, last in-loop step):
+    # Falls back to num_sampling_step - 1 (near-fully-denoised, last in-loop step):
     # the post-loop "clean pass" branch in video2world.generate_video returns a
     # 0-D sigma_min that crashes the caller's `.unsqueeze(1)`. The in-loop
     # branch returns a 1-D sigma, which works. Lower it to trade quality for
     # latency.
-    effective_stop = stop_after_step if stop_after_step is not None else args.stop_after_step
-    if effective_stop is None:
-        effective_stop = max(0, num_sampling_step - 1)
+    effective_stop = stop_after_step if stop_after_step is not None else max(0, num_sampling_step - 1)
 
     t0 = time.time()
     with state["gpu_lock"]:
@@ -535,8 +533,6 @@ def parse_args() -> argparse.Namespace:
                         "runs faster and you want server-side downsampling (e.g. 6 for a 30 Hz feed).")
     p.add_argument("--resize-h", type=int, default=480)
     p.add_argument("--resize-w", type=int, default=640)
-    p.add_argument("--stop-after-step", type=int, default=None,
-                   help="Stop video denoising after this step (saves time at small quality cost).")
     p.add_argument("--expected-state-dim", type=int, default=6,
                    help="Validate inbound state vectors have this dim. 6 for SO-ARM-101. "
                         "Pass 0 (or any non-positive value) to disable the check.")

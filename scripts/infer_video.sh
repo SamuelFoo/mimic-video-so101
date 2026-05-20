@@ -16,13 +16,14 @@ DATA_ROOT="${DATA_ROOT:-${REPO_ROOT}/data}"
 DATASET_NAME="${DATASET_NAME:-ex1_merged_2026-05-13_12-20-44}"
 RUN_DIR="${RUN_DIR:-${REPO_ROOT}/runs/video_inference/${DATASET_NAME}}"
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-${REPO_ROOT}/mimic-video/model/checkpoints}"
-VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${REPO_ROOT}/checkpoints/video/iter_000000375_fused.pt}"
+VIDEO_DIT_PATH="${VIDEO_DIT_PATH:-${REPO_ROOT}/checkpoints/model/iter_000000600_fused.pt}"
 MODEL_NAME="${MODEL_NAME:-$(basename "${VIDEO_DIT_PATH}" .pt)}"
 OUTPUT_DIR="${OUTPUT_DIR:-${RUN_DIR}/outputs/${MODEL_NAME}}"
 BATCH_JSON="${BATCH_JSON:-${RUN_DIR}/batch.json}"
 NUM_CONDITIONAL_FRAMES="${NUM_CONDITIONAL_FRAMES:-5}"
 GUIDANCE="${GUIDANCE:-7}"
 SEED="${SEED:-0}"
+EPISODE_STRIDE="${EPISODE_STRIDE:-5}"  # run every Nth episode; 1 = all episodes
 # ---------------------------------------------------------------------------
 
 MODEL_PYTHON="${MODEL_DIR}/.venv/bin/python"
@@ -50,7 +51,11 @@ fi
 
 PATCHED_BATCH_JSON="$(mktemp --suffix=.json)"
 trap 'rm -f "${PATCHED_BATCH_JSON}"' EXIT
-sed "s|${RUN_DIR}/outputs/|${OUTPUT_DIR}/|g" "${BATCH_JSON}" > "${PATCHED_BATCH_JSON}"
+sed "s|${RUN_DIR}/outputs/|${OUTPUT_DIR}/|g" "${BATCH_JSON}" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d[::${EPISODE_STRIDE}], indent=2))" \
+  > "${PATCHED_BATCH_JSON}"
+echo "Episodes selected: $(python3 -c "import json; d=json.load(open('${PATCHED_BATCH_JSON}')); print(len(d))")" \
+     "(stride=${EPISODE_STRIDE})"
 mkdir -p "${OUTPUT_DIR}"
 
 cd "${MODEL_DIR}"

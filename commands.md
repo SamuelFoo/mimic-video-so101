@@ -57,6 +57,22 @@ lerobot-edit-dataset \
   --operation.episode_indices "[4]"
 ```
 
+Or locally if remote doesn't work (happens if HF doesn't detect the dataset as a LeRobot dataset):
+
+```bash
+hf download robot-learning/ex3-1-orange_merged \
+  --local-dir ./ex3-1-orange_merged \
+  --repo-type dataset
+
+lerobot-edit-dataset \
+  --repo_id robot-learning/ex3-1-orange_merged \
+  --new_repo_id robot-learning/ex3-1-orange_merged_filtered \
+  --operation.type delete_episodes \
+  --operation.episode_indices "[19]" \
+  --push_to_hub True \
+  --root ./ex3-1-orange_merged
+```
+
 # Record Dataset (MacBook Emerson)
 
 ```bash

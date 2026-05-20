@@ -15,18 +15,6 @@ Three ways, in priority order (most specific wins):
 2. `--host` + `--port` flags
 3. `MIMIC_VIDEO_SERVER=http://host:port` env var
 4. Fallback to `http://localhost:8000` (matches the server default)
-
-The typical laptop setup is an SSH tunnel:
-
-    ssh -L 8000:localhost:8000 user@gpu-box
-    # then on the laptop:
-    python deployment/client_mimic_video.py \\
-        --image frame.jpg \\
-        --state '[0,-90,90,0,0,30]' \\
-        --prompt 'pick up the red block'
-
-Dependencies on the laptop: just `requests` (`pip install requests`). No torch,
-no cosmos, no model env needed.
 """
 
 from __future__ import annotations
