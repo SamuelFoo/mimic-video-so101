@@ -7,9 +7,9 @@
 #
 #   checkpoints/
 #     action/iter_XXXXXX_fused.pt   <- LoRA fused into base weights
+#     action/config.yaml            <- action net architecture
 #     video/<video_ckpt_filename>   <- V2W backbone the run was trained on
 #     dataset_statistics.json       <- normalization stats (no .statistics_cache needed)
-#     config.yaml                   <- action net architecture
 #
 # Usage: edit RUN_DIR and VIDEO_DIT_PATH below, then run.
 
@@ -88,8 +88,8 @@ hf upload "$HF_REPO" "$VIDEO_DIT_PATH" "checkpoints/video/$VIDEO_FILENAME" --rep
 echo "==> Uploading stats -> checkpoints/dataset_statistics.json"
 hf upload "$HF_REPO" "$STATS_FILE" "checkpoints/dataset_statistics.json" --repo-type model
 
-echo "==> Uploading config -> checkpoints/config.yaml"
-hf upload "$HF_REPO" "$RUN_DIR/config.yaml" "checkpoints/config.yaml" --repo-type model
+echo "==> Uploading config -> checkpoints/action/config.yaml"
+hf upload "$HF_REPO" "$RUN_DIR/config.yaml" "checkpoints/action/config.yaml" --repo-type model
 
 echo
 echo "==> Done. View at: https://huggingface.co/$HF_REPO"
