@@ -51,6 +51,7 @@ SAVE_ITER="${SAVE_ITER:-50}"
 LOAD_PATH="${LOAD_PATH:-/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128_20260518_093904/vam/lerobot/w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128/checkpoints/model/iter_000002950.pt}"
 
 # Action decoder architecture — author defaults from world2action_pipe.py.
+XATTN_VIDEO_PREFIX_LENGTH="${XATTN_VIDEO_PREFIX_LENGTH:-8}" # null = full 16 latent timesteps; set to e.g. 8 to slice
 ACTION_MODEL_CHANNELS="${ACTION_MODEL_CHANNELS:-512}" # author: 1024
 ACTION_MODEL_BLOCKS="${ACTION_MODEL_BLOCKS:-12}" # author: 24
 ACTION_MODEL_HEADS="${ACTION_MODEL_HEADS:-8}" # author: 8
@@ -162,6 +163,8 @@ torchrun \
        model.config.pipe_config.net.num_heads="${ACTION_MODEL_HEADS}" \
        model.config.pipe_config.net.pair_timestep_feature_rank="${ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK}" \
        model.config.pipe_config.net.adaln_lora_dim="${ACTION_MODEL_ADALN_LORA_DIM}" \
+       world2action_pipe.xattn_video_prefix_length="${XATTN_VIDEO_PREFIX_LENGTH}" \
+       model.config.pipe_config.xattn_video_prefix_length="${XATTN_VIDEO_PREFIX_LENGTH}" \
        dataloader_train.num_workers="${DATALOADER_NUM_WORKERS}" \
        dataloader_train.prefetch_factor="${DATALOADER_PREFETCH_FACTOR}" \
        dataloader_train.persistent_workers="${DATALOADER_PERSISTENT_WORKERS}" \
