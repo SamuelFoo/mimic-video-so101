@@ -18,7 +18,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MODEL_DIR="${REPO_ROOT}/mimic-video/model"
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-${REPO_ROOT}/mimic-video/model/checkpoints}"
 
-EXPERIMENT="${EXPERIMENT:-w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128}"
+EXPERIMENT="${EXPERIMENT:-w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128}"
 
 # Must match train_mimic_video.sh — MimicDataset globs **/*.zarr under this dir.
 export MIMIC_VIDEO_DATASET_DIR="${MIMIC_VIDEO_DATASET_DIR:-${REPO_ROOT}/staging/mimic-video}"
