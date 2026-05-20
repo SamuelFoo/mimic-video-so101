@@ -33,10 +33,7 @@ DATASET_PAIRS=(
 
 # Datasets whose zarr already exists — skip Phase 1 but still run T5 (Phase 2).
 ZARR_SKIP=(
-    "ex3-1-blue_all"
-    "ex3-1-orange_all"
-    "ex3-2-blue_all"
-    "ex3-2-orange_all"
+    
 )
 # ---------------------------------------------------------------------------
 

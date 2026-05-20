@@ -51,6 +51,7 @@ SAVE_ITER="${SAVE_ITER:-50}"
 LOAD_PATH="${LOAD_PATH:-/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128_20260518_093904/vam/lerobot/w2a_lerobot_iter_000000610_fused_lr1.000e-04_layer20_bsz128/checkpoints/model/iter_000002950.pt}"
 
 # Action decoder architecture — author defaults from world2action_pipe.py.
+XATTN_VIDEO_PREFIX_LENGTH="${XATTN_VIDEO_PREFIX_LENGTH:-8}" # null = full 16 latent timesteps; set to e.g. 8 to slice
 ACTION_MODEL_CHANNELS="${ACTION_MODEL_CHANNELS:-512}" # author: 1024
 ACTION_MODEL_BLOCKS="${ACTION_MODEL_BLOCKS:-12}" # author: 24
 ACTION_MODEL_HEADS="${ACTION_MODEL_HEADS:-8}" # author: 8
@@ -73,7 +74,7 @@ fi
 # default bsz128 experiment on 1 GPU the local batch is 128; on 2 GPUs it
 # would be 64. Increase EXPERIMENT to a bsz256 variant when scaling up.
 TRAIN_LOCAL_BATCH_SIZE="${TRAIN_LOCAL_BATCH_SIZE:-32}" # author: global_bsz / world_size (128 for bsz128 on 1 GPU)
-GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-4}" # author: 1
+GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-2}" # author: 1
 
 WANDB__SERVICE_WAIT="${WANDB__SERVICE_WAIT:-120}"
 WANDB_START_METHOD="${WANDB_START_METHOD:-thread}"
@@ -102,9 +103,15 @@ source "${MODEL_DIR}/.venv/bin/activate"
 export PATH="/sbin:/usr/sbin:${PATH}"
 export CUDA_HOME="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc"
 export CUDA_PATH="${CUDA_HOME}"
-export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc/lib:${LD_LIBRARY_PATH:-}"
-export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH:-}"
+_CUDA_RUNTIME_LIB="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_runtime/lib"
+# dlopen("libcudart.so") needs the unversioned name; create symlink if missing
+if [[ -f "${_CUDA_RUNTIME_LIB}/libcudart.so.12" && ! -e "${_CUDA_RUNTIME_LIB}/libcudart.so" ]]; then
+    ln -sf libcudart.so.12 "${_CUDA_RUNTIME_LIB}/libcudart.so"
+fi
+export LD_LIBRARY_PATH="${_CUDA_RUNTIME_LIB}:${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH}"
 echo "NVRTC lib path: ${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc/lib"
+echo "CUDART lib path: ${_CUDA_RUNTIME_LIB}"
 
 export COSMOS_PREDICT2_ARGS="${COSMOS_PREDICT2_ARGS:---checkpoints ${CHECKPOINT_DIR}}"
 
@@ -162,6 +169,8 @@ torchrun \
        model.config.pipe_config.net.num_heads="${ACTION_MODEL_HEADS}" \
        model.config.pipe_config.net.pair_timestep_feature_rank="${ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK}" \
        model.config.pipe_config.net.adaln_lora_dim="${ACTION_MODEL_ADALN_LORA_DIM}" \
+       world2action_pipe.xattn_video_prefix_length="${XATTN_VIDEO_PREFIX_LENGTH}" \
+       model.config.pipe_config.xattn_video_prefix_length="${XATTN_VIDEO_PREFIX_LENGTH}" \
        dataloader_train.num_workers="${DATALOADER_NUM_WORKERS}" \
        dataloader_train.prefetch_factor="${DATALOADER_PREFETCH_FACTOR}" \
        dataloader_train.persistent_workers="${DATALOADER_PERSISTENT_WORKERS}" \
