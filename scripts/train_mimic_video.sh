@@ -74,7 +74,7 @@ fi
 # default bsz128 experiment on 1 GPU the local batch is 128; on 2 GPUs it
 # would be 64. Increase EXPERIMENT to a bsz256 variant when scaling up.
 TRAIN_LOCAL_BATCH_SIZE="${TRAIN_LOCAL_BATCH_SIZE:-32}" # author: global_bsz / world_size (128 for bsz128 on 1 GPU)
-GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-4}" # author: 1
+GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-2}" # author: 1
 
 WANDB__SERVICE_WAIT="${WANDB__SERVICE_WAIT:-120}"
 WANDB_START_METHOD="${WANDB_START_METHOD:-thread}"
