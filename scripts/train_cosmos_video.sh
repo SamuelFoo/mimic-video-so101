@@ -29,7 +29,7 @@ CHECKPOINT_DIR="${CHECKPOINT_DIR:-${MODEL_DIR}/checkpoints}"
 #   ex1        -> ex1_merged       (data/ex1_merged-cosmos-video)
 #   ex2        -> ex2_merged       (data/ex2_merged-cosmos-video)
 #   ex1_ex2    -> ex1_ex2_merged   (MultiDataset mixing ex1 + ex2)
-EX_TYPE="${EX_TYPE:-ex1_ex2}"
+EX_TYPE="${EX_TYPE:-ex1_ex2_ex3}"
 DATASET_NAME="${DATASET_NAME:-${EX_TYPE}_merged}"
 # LoRA rank — must be one of the values in `ranks` in
 # cosmos_predict2/configs/experiment/video2world.py. Lower rank = less capacity
@@ -50,14 +50,15 @@ TIMESTAMP="${TIMESTAMP:-$(date +%Y-%m-%d_%H-%M-%S)}"
 MAX_ITER="${MAX_ITER:-1000000}"      # author: 1_000_000
 LOGGING_ITER="${LOGGING_ITER:-1}" # author: 1_000
 GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-16}"  # author: 1
-TRAIN_LOCAL_BATCH_SIZE="${TRAIN_LOCAL_BATCH_SIZE:-2}" # author: 32
+TRAIN_LOCAL_BATCH_SIZE="${TRAIN_LOCAL_BATCH_SIZE:-4}" # author: 32
 # Checkpoint cadence (the upstream "boundary window" auto-save in
 # imaginaire/trainer.py has been removed, so this is the only schedule).
 SAVE_ITER="${SAVE_ITER:-5}"
 # Optional learning-rate override. Unset = use the experiment grid's LR
 # (encoded in the experiment name, e.g. 1.778e-04 for the default).
 LR="${LR:-5.623e-05}"
-EXPERIMENT="${EXPERIMENT:-v2w_${DATASET_NAME}_lora_rank${LORA_RANK}_lr${LR}_bsz32}"
+BSZ="${BSZ:-$(( TRAIN_LOCAL_BATCH_SIZE * GRAD_ACCUM_ITER ))}"
+EXPERIMENT="${EXPERIMENT:-v2w_${DATASET_NAME}_lora_rank${LORA_RANK}_lr${LR}_bsz${BSZ}}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/runs/cosmos_video/${EXPERIMENT}_${TIMESTAMP}}"
 
 # Wandb
@@ -105,21 +106,41 @@ export NVTE_FUSED_ATTN=0
 cd "${MODEL_DIR}"
 
 echo "=== Cosmos Video2World Finetuning ==="
-echo "Node:        $(hostname)"
-echo "Experiment:  ${EXPERIMENT}"
-echo "LoRA rank:   ${LORA_RANK}"
-echo "Video ckpt:  ${VIDEO_DIT_PATH}"
-echo "Output dir:  ${OUTPUT_DIR}"
-echo "WandB:       enabled=${WANDB_ENABLED}, project=${WANDB_PROJECT}, mode=${WANDB_MODE}"
-echo "Nodes:       ${NNODES}"
-echo "GPUs/node:   ${GPUS_PER_NODE}"
-echo "Max iter:    ${MAX_ITER}"
-echo "Logging:     every ${LOGGING_ITER} iter"
-echo "Save:        every ${SAVE_ITER} iter"
-echo "Grad accum:  ${GRAD_ACCUM_ITER}"
-echo "Local bsz:   ${TRAIN_LOCAL_BATCH_SIZE:-<grid: global_bsz/world_size>}"
-echo "LR:          ${LR}"
-echo "Rendezvous:  ${MASTER_ADDR}:${MASTER_PORT}"
+printf "Node:        %s\n" "$(hostname)"
+printf "Experiment:  %s\n" "${EXPERIMENT}"
+printf "LoRA rank:   %s\n" "${LORA_RANK}"
+printf "Output dir:  %s\n" "${OUTPUT_DIR}"
+printf "WandB:       enabled=%s, project=%s, mode=%s\n" "${WANDB_ENABLED}" "${WANDB_PROJECT}" "${WANDB_MODE}"
+printf "Nodes:       %s\n" "${NNODES}"
+printf "GPUs/node:   %s\n" "${GPUS_PER_NODE}"
+printf "Max iter:    %s\n" "${MAX_ITER}"
+printf "Logging:     every %s iter\n" "${LOGGING_ITER}"
+printf "Save:        every %s iter\n" "${SAVE_ITER}"
+printf "Grad accum:  %s\n" "${GRAD_ACCUM_ITER}"
+printf "Local bsz:   %s\n" "${TRAIN_LOCAL_BATCH_SIZE:-<grid: global_bsz/world_size>}"
+printf "Global bsz:  %s\n" "${BSZ}"
+printf "LR:          %s\n" "${LR}"
+printf "Rendezvous:  %s:%s\n" "${MASTER_ADDR}" "${MASTER_PORT}"
+echo
+
+CKPT_LINK="${CHECKPOINT_DIR}/video_backbone/v2w_pretrained_cosmos.pt"
+
+echo "=== Checkpoint ==="
+printf "Expected:    %s\n" "$CKPT_LINK"
+
+if [[ -L "$CKPT_LINK" ]]; then
+    printf "Status:      OK symlink\n"
+    printf "Resolves to: %s\n" "$(readlink -f "$CKPT_LINK")"
+elif [[ -f "$CKPT_LINK" ]]; then
+    printf "Status:      OK regular file\n"
+else
+    printf "Status:      MISSING\n" >&2
+    printf "ERROR: checkpoint not found: %s\n" "$CKPT_LINK" >&2
+    exit 2
+fi
+
+printf "Size:        "
+ls -lh "$CKPT_LINK" | awk '{print $5}'
 echo
 
 extra_args=()
