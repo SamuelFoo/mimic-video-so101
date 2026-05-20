@@ -103,9 +103,15 @@ source "${MODEL_DIR}/.venv/bin/activate"
 export PATH="/sbin:/usr/sbin:${PATH}"
 export CUDA_HOME="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc"
 export CUDA_PATH="${CUDA_HOME}"
-export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc/lib:${LD_LIBRARY_PATH:-}"
-export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH:-}"
+_CUDA_RUNTIME_LIB="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_runtime/lib"
+# dlopen("libcudart.so") needs the unversioned name; create symlink if missing
+if [[ -f "${_CUDA_RUNTIME_LIB}/libcudart.so.12" && ! -e "${_CUDA_RUNTIME_LIB}/libcudart.so" ]]; then
+    ln -sf libcudart.so.12 "${_CUDA_RUNTIME_LIB}/libcudart.so"
+fi
+export LD_LIBRARY_PATH="${_CUDA_RUNTIME_LIB}:${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH}"
 echo "NVRTC lib path: ${MODEL_DIR}/.venv/lib/python3.10/site-packages/nvidia/cuda_nvrtc/lib"
+echo "CUDART lib path: ${_CUDA_RUNTIME_LIB}"
 
 export COSMOS_PREDICT2_ARGS="${COSMOS_PREDICT2_ARGS:---checkpoints ${CHECKPOINT_DIR}}"
 
