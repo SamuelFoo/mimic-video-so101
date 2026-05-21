@@ -492,7 +492,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--server", default=None, help="Full server URL (else env MIMIC_VIDEO_SERVER or http://localhost:8000)")
     p.add_argument("--timeout", type=float, default=600.0, help="HTTP timeout seconds")
     p.add_argument("--num-sampling-step", type=int, default=35)
-    p.add_argument("--stop-after-step", type=int, default=1,
+    p.add_argument("--stop-after-step", type=int, default=0,
                    help="Stop video denoising after this step (trade quality for latency). "
                         "Sent on every /infer call so you can change it without restarting the server.")
     p.add_argument("--seed", type=int, default=0,
