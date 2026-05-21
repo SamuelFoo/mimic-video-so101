@@ -95,6 +95,8 @@ def load_pipeline(
     action_model_path: str,
     dataset_statistics_path: pathlib.Path,
     action_config_path: pathlib.Path | None,
+    pipeline_state_t: int,
+    xattn_video_prefix_length: str,
     dtype: torch.dtype = torch.bfloat16,
 ) -> Video2World2ActionPipeline:
     config = make_config()
@@ -110,8 +112,20 @@ def load_pipeline(
             "Copy the config.yaml from your training run next to the action checkpoint, "
             "or set ACTION_CONFIG_PATH=/path/to/config.yaml."
         )
+    # The action ckpt was trained with a specific xattn_video_prefix_length;
+    # if it doesn't match here, cross-attn sees a KV set the decoder wasn't
+    # trained on. Same paths the train script overrides.
+    overrides.extend([
+        f"world2action_pipe.xattn_video_prefix_length={xattn_video_prefix_length}",
+        f"model.config.pipe_config.xattn_video_prefix_length={xattn_video_prefix_length}",
+    ])
     config = override(config, overrides)
     config.model.config.video_pipe_config.guardrail_config.enabled = False
+    # The video DiT was trained for a specific state_t; the pipeline config
+    # default (config_video2world.py) may have moved since. Pin it here to
+    # match the checkpoint, otherwise denoising state_shape and DiT positional
+    # embeddings disagree.
+    config.model.config.video_pipe_config.state_t = pipeline_state_t
 
     video_pipe = Video2WorldPipeline.from_config(
         config=config.model.config.video_pipe_config,
@@ -232,6 +246,8 @@ def make_app(args: argparse.Namespace) -> FastAPI:
             action_model_path=args.action_model_path,
             dataset_statistics_path=pathlib.Path(args.dataset_statistics_path),
             action_config_path=action_config_path,
+            pipeline_state_t=args.pipeline_state_t,
+            xattn_video_prefix_length=args.xattn_video_prefix_length,
         )
         log.info(f"Pipeline ready in {time.time() - t0:.1f}s on cuda:0.")
 
@@ -402,7 +418,7 @@ def _decode_video_at_step(
     _T, _H, _W = data_batch[input_key].shape[-3:]
     state_shape = [
         video_pipe.config.state_ch,
-        16,
+        video_pipe.config.state_t,
         _H // video_pipe.tokenizer.spatial_compression_factor,
         _W // video_pipe.tokenizer.spatial_compression_factor,
     ]
@@ -554,6 +570,14 @@ def parse_args() -> argparse.Namespace:
                         "world2action_pipe.net.* values from this file override the experiment-default "
                         "architecture so any future arch change (model_channels, num_blocks, ...) is picked "
                         "up automatically. Defaults to <action-model-path's dir>/config.yaml.")
+    p.add_argument("--pipeline-state-t", type=int, required=True,
+                   help="Number of latent timesteps the video DiT emits. Must equal the state_t the "
+                        "action checkpoint was trained against — the config_video2world.py default may "
+                        "have moved since the checkpoint was trained.")
+    p.add_argument("--xattn-video-prefix-length", default="null",
+                   help="Slice the video DiT's hidden states to the first N latent timesteps before "
+                        "cross-attn into the action decoder. Must match training. Use 'null' for no "
+                        "slicing (action decoder sees all state_t positions).")
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8000)
     return p.parse_args()

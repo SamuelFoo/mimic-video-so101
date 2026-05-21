@@ -33,6 +33,14 @@ EXPERIMENT_NAME="${EXPERIMENT_NAME:-w2a_lerobot_iter_000000375_fused_lr1.000e-04
 VIDEO_MODEL_PATH="${VIDEO_MODEL_PATH:-${REPO_ROOT}/checkpoints/video/iter_000000375_fused.pt}"
 ACTION_MODEL_PATH="${ACTION_MODEL_PATH:-${REPO_ROOT}/checkpoints/action/iter_000002000.pt}"
 
+# ---- Pipeline shape: must match the action checkpoint above ---------------
+# The current action ckpt (iter_000002000) was trained against a state_t=16
+# video DiT with xattn_video_prefix_length=8 (slice to first 8 of 16 latents).
+# After the aeaaa79 retrain — state_t=6 video DiT, no slicing — set these to
+# PIPELINE_STATE_T=6 and XATTN_VIDEO_PREFIX_LENGTH=null.
+PIPELINE_STATE_T="${PIPELINE_STATE_T:-16}"
+XATTN_VIDEO_PREFIX_LENGTH="${XATTN_VIDEO_PREFIX_LENGTH:-8}"
+
 # Dataset normalization stats — look first in ./checkpoints/ (where a trained
 # checkpoint bundle would include it), then fall back to the data cache written
 # by MimicDataset during training.
@@ -110,6 +118,7 @@ echo "Video ckpt:    ${VIDEO_MODEL_PATH}"
 echo "Action ckpt:   ${ACTION_MODEL_PATH}"
 echo "Stats:         ${DATASET_STATS}"
 echo "img_horizon=${IMG_HORIZON}  lowdim_horizon=${LOWDIM_HORIZON}  frame_stride=${FRAME_STRIDE}"
+echo "state_t=${PIPELINE_STATE_T}  xattn_video_prefix_length=${XATTN_VIDEO_PREFIX_LENGTH}"
 echo "Listening on:  http://${HOST}:${PORT}"
 echo "==============================================="
 
@@ -127,6 +136,8 @@ exec "${MODEL_PYTHON}" "${SCRIPT_DIR}/serve_mimic_video.py" \
   --expected-state-dim "${EXPECTED_STATE_DIM}" \
   --num-execute-actions "${NUM_EXECUTE_ACTIONS}" \
   --action-config-path "${ACTION_CONFIG_PATH}" \
+  --pipeline-state-t "${PIPELINE_STATE_T}" \
+  --xattn-video-prefix-length "${XATTN_VIDEO_PREFIX_LENGTH}" \
   --video-dir "${VIDEO_DIR}" \
   --video-fps "${VIDEO_FPS}" \
   --host "${HOST}" \
