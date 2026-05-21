@@ -73,7 +73,7 @@ else
     fi
     conda activate lerobot
     conda install -y ffmpeg pinocchio -c conda-forge
-    pip install lerobot 'zarr<3' 'numcodecs<0.16'
+    pip install lerobot 'zarr<3' 'numcodecs<0.16' opencv-python
     conda deactivate
 fi
 
