@@ -27,19 +27,19 @@ CHECKPOINT_DIR="${MIMIC_VIDEO_CHECKPOINT_DIR:-${MODEL_DIR}/checkpoints}"
 # Experiment name is auto-registered by the grid in
 # mimic-video/model/cosmos_predict2/configs/experiment/world2action.py for the
 # 'lerobot' data_config. The default below matches train_mimic_video.sh.
-EXPERIMENT_NAME="${EXPERIMENT_NAME:-w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128}"
+EXPERIMENT_NAME="${EXPERIMENT_NAME:-w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128}"
 
 # Video backbone
-VIDEO_MODEL_PATH="${VIDEO_MODEL_PATH:-${REPO_ROOT}/checkpoints/video/iter_000000375_fused.pt}"
-ACTION_MODEL_PATH="${ACTION_MODEL_PATH:-${REPO_ROOT}/checkpoints/action/iter_000002000.pt}"
+VIDEO_MODEL_PATH="${VIDEO_MODEL_PATH:-${REPO_ROOT}/checkpoints/video/iter_000000650_fused.pt}"
+ACTION_MODEL_PATH="${ACTION_MODEL_PATH:-${REPO_ROOT}/checkpoints/action/iter_000001400_fused.pt}"
 
 # ---- Pipeline shape: must match the action checkpoint above ---------------
 # The current action ckpt (iter_000002000) was trained against a state_t=16
 # video DiT with xattn_video_prefix_length=8 (slice to first 8 of 16 latents).
 # After the aeaaa79 retrain — state_t=6 video DiT, no slicing — set these to
 # PIPELINE_STATE_T=6 and XATTN_VIDEO_PREFIX_LENGTH=null.
-PIPELINE_STATE_T="${PIPELINE_STATE_T:-16}"
-XATTN_VIDEO_PREFIX_LENGTH="${XATTN_VIDEO_PREFIX_LENGTH:-8}"
+PIPELINE_STATE_T="${PIPELINE_STATE_T:-6}"
+XATTN_VIDEO_PREFIX_LENGTH="${XATTN_VIDEO_PREFIX_LENGTH:-null}"
 
 # Dataset normalization stats — look first in ./checkpoints/ (where a trained
 # checkpoint bundle would include it), then fall back to the data cache written
