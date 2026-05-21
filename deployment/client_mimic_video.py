@@ -49,6 +49,7 @@ class MimicVideoClient:
         image_bytes: bytes,
         *,
         images_bytes: list[bytes] | None = None,
+        states: list[list[float]] | None = None,
         return_full_chunk: bool = True,
         num_sampling_step: int = 35,
         stop_after_step: int | None = None,
@@ -60,7 +61,10 @@ class MimicVideoClient:
         `image_bytes` should be raw JPEG/PNG bytes of the most recent frame.
         `images_bytes`, if provided, is the full frame history oldest→newest
         (len must equal the server's img_horizon). When given, the server uses
-        these frames directly instead of its own rolling buffer.
+        these frames directly instead of falling back to repeating `image_bytes`.
+        `states`, if provided, is the full low-dim state history oldest→newest
+        (len must equal the server's lowdim_horizon). When given, the server
+        uses these states directly instead of repeating `state`.
         """
         body = {
             "prompt": prompt,
@@ -73,6 +77,8 @@ class MimicVideoClient:
         }
         if images_bytes is not None:
             body["images_b64"] = [base64.b64encode(b).decode("ascii") for b in images_bytes]
+        if states is not None:
+            body["states"] = [list(s) for s in states]
         r = self._session.post(
             f"{self.server}/infer",
             json=body,

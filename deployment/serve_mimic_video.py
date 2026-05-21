@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import collections
 import io
 import json
 import logging
@@ -156,35 +155,28 @@ def load_pipeline(
 
 
 # ---------------------------------------------------------------------------
-# Inference session (state history and action buffer)
+# Inference session (cached action buffer for receding-horizon re-plan)
 # ---------------------------------------------------------------------------
 
 class InferenceSession:
-    """Holds low-dim state history and a cached action buffer for one episode."""
+    """Caches the most recent action chunk so callers can drain it across
+    successive /infer calls without re-running the diffusion model.
 
-    def __init__(self, lowdim_horizon: int, resize_hw: tuple[int, int]):
-        self.lowdim_horizon = lowdim_horizon
+    State history is NOT cached here — it's sent by the client on every call
+    (matching the per-call `images_b64` pattern). This avoids the pitfall where
+    a client restart with the same prompt leaves stale per-step state in the
+    server's deque (the prompt-change branch is the only reset trigger)."""
+
+    def __init__(self, resize_hw: tuple[int, int]):
         self.resize_hw = resize_hw
-        self._lowdim_history: collections.deque[np.ndarray] = collections.deque(maxlen=lowdim_horizon)
         self.prompt: str = ""
         self.action_buffer: np.ndarray | None = None
         self.action_buffer_idx: int = 0
 
     def reset(self, prompt: str) -> None:
         self.prompt = prompt
-        self._lowdim_history.clear()
         self.action_buffer = None
         self.action_buffer_idx = 0
-
-    def add_state(self, lowdim: np.ndarray) -> None:
-        self._lowdim_history.append(lowdim)
-        while len(self._lowdim_history) < self.lowdim_horizon:
-            self._lowdim_history.append(lowdim.copy())
-
-    def build_input_state(self) -> np.ndarray:
-        if not self._lowdim_history:
-            raise ValueError("No state in history; send a state vector first.")
-        return np.stack(list(self._lowdim_history), axis=0)
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +202,8 @@ class InferRequest(BaseModel):
     prompt: str
     state: list[float]
     image_b64: str  # base64-encoded JPEG or PNG (most recent frame)
-    images_b64: list[str] | None = None  # optional: full frame history oldest→newest; bypasses server-side accumulation
+    images_b64: list[str] | None = None  # optional: full frame history oldest→newest; bypasses single-frame fallback
+    states: list[list[float]] | None = None  # optional: full state history oldest→newest; bypasses single-state fallback
     return_full_chunk: bool = True
     num_sampling_step: int = 35
     stop_after_step: int | None = None
@@ -224,10 +217,7 @@ def make_app(args: argparse.Namespace) -> FastAPI:
     # quickly enough for healthchecks; in practice we load it in startup.
     state: dict[str, Any] = {
         "pipeline": None,
-        "session": InferenceSession(
-            lowdim_horizon=args.lowdim_horizon,
-            resize_hw=(args.resize_h, args.resize_w),
-        ),
+        "session": InferenceSession(resize_hw=(args.resize_h, args.resize_w)),
         # Serialize GPU calls — one 2B-DiT forward at a time per process.
         "gpu_lock": threading.Lock(),
     }
@@ -273,6 +263,7 @@ def make_app(args: argparse.Namespace) -> FastAPI:
             stop_after_step=req.stop_after_step,
             seed=req.seed,
             all_images_bytes=all_images_bytes,
+            all_states=req.states,
         ))
 
     return app
@@ -294,6 +285,7 @@ def _run_step(
     stop_after_step: int | None,
     seed: int,
     all_images_bytes: list[bytes] | None = None,
+    all_states: list[list[float]] | None = None,
 ) -> dict[str, Any]:
     session: InferenceSession = state["session"]
     pipeline: Video2World2ActionPipeline = state["pipeline"]
@@ -310,8 +302,6 @@ def _run_step(
     if prompt != session.prompt:
         log.info(f"Prompt changed → resetting session: {prompt!r}")
         session.reset(prompt)
-
-    session.add_state(state_vec)
 
     request_id = uuid.uuid4().hex[:8]
 
@@ -336,7 +326,30 @@ def _run_step(
         single = decode_and_preprocess(image_bytes, session.resize_hw)
         frames = [single] * args.img_horizon
     images = np.concatenate(frames, axis=1)  # (C, img_horizon, H, W)
-    lowdims = session.build_input_state()  # (lowdim_horizon, state_dim)
+
+    # State history: client-supplied (oldest→newest) when present, otherwise
+    # repeat the single most-recent state to fill the horizon. Mirrors the
+    # images_b64 fallback so a one-shot CLI request still works.
+    if all_states is not None:
+        if len(all_states) != args.lowdim_horizon:
+            raise HTTPException(
+                400,
+                f"states must have exactly {args.lowdim_horizon} entries, got {len(all_states)}",
+            )
+        lowdims_list = []
+        for i, s in enumerate(all_states):
+            arr = np.asarray(s, dtype=np.float32)
+            if arr.ndim != 1:
+                raise HTTPException(400, f"states[{i}] must be 1-D, got shape {arr.shape}")
+            if args.expected_state_dim is not None and arr.shape[0] != args.expected_state_dim:
+                raise HTTPException(
+                    400,
+                    f"states[{i}] must be {args.expected_state_dim}-D, got {arr.shape[0]}",
+                )
+            lowdims_list.append(arr)
+        lowdims = np.stack(lowdims_list, axis=0)
+    else:
+        lowdims = np.stack([state_vec] * args.lowdim_horizon, axis=0)
 
     input_vid = torch.from_numpy(images[None]).cuda().bfloat16()
     state_tensor = torch.from_numpy(lowdims[None]).cuda().bfloat16()
@@ -542,7 +555,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--action-model-path", required=True)
     p.add_argument("--dataset-statistics-path", required=True)
     p.add_argument("--img-horizon", type=int, default=5)
-    p.add_argument("--lowdim-horizon", type=int, default=1)
+    p.add_argument("--lowdim-horizon", type=int, default=1,
+                   help="Number of low-dim state entries the action decoder expects per call. "
+                        "Clients can either send a 'states' list of exactly this length "
+                        "(oldest→newest), or send a single 'state' that the server repeats "
+                        "to fill the horizon.")
     p.add_argument("--frame-stride", type=int, default=1,
                    help="Keep every Nth raw frame for conditioning. Use 1 if the client already streams at "
                         "the policy's conditioning fps (5 Hz for the LeRobot run). Raise it if your camera "

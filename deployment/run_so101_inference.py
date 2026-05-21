@@ -283,6 +283,7 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
     stop_flag = {"value": False}
 
     frame_history: collections.deque[bytes] = collections.deque(maxlen=args.img_horizon)
+    state_history: collections.deque[list[float]] = collections.deque(maxlen=args.lowdim_horizon)
     last_frame_t: float = 0.0
     frame_interval: float = 1.0 / args.frame_capture_hz
 
@@ -316,8 +317,10 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
             # Record the freshly-captured frame into history just before sending
             # the request so the server always sees the most up-to-date observation.
             frame_history.append(jpeg)
+            state_history.append(state)
             last_frame_t = time.perf_counter()
             images_bytes_list = list(frame_history) if len(frame_history) == args.img_horizon else None
+            states_list = list(state_history) if len(state_history) == args.lowdim_horizon else None
             display.show_history(list(frame_history))
 
             t0 = time.perf_counter()
@@ -327,6 +330,7 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
                 state=state,
                 image_bytes=jpeg,
                 images_bytes=images_bytes_list,
+                states=states_list,
                 return_full_chunk=True,
                 num_sampling_step=args.num_sampling_step,
                 stop_after_step=args.stop_after_step,
@@ -414,7 +418,10 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
                 target_t = chunk_start + (i + 1) * command_dt
                 now = time.perf_counter()
 
-                # Capture a frame at frame_capture_hz into the rolling history.
+                # Capture a frame+state at frame_capture_hz into the rolling
+                # histories. State must be sampled at the same cadence as frames
+                # (the policy was trained at 5 Hz; sampling once per chunk would
+                # leave consecutive entries seconds apart, out of distribution).
                 if now - last_frame_t >= frame_interval:
                     try:
                         cap_obs = robot.get_observation()
@@ -422,6 +429,10 @@ def run_loop(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
                         if cap_frame is not None:
                             display.show(cap_frame)
                             frame_history.append(encode_frame_jpeg(cap_frame, quality=args.jpeg_quality))
+                            cap_state = state_from_obs(cap_obs)
+                            if args.reverse_joint_order:
+                                cap_state = list(reversed(cap_state))
+                            state_history.append(cap_state)
                             last_frame_t = now
                     except Exception as exc:
                         print(f"  warn: frame capture failed: {exc}", file=sys.stderr)
@@ -491,6 +502,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--jpeg-quality", type=int, default=90, help="JPEG quality for the frame upload (1-100)")
     p.add_argument("--img-horizon", type=int, default=5,
                    help="Number of historical frames to send per inference call (must match server's img_horizon)")
+    p.add_argument("--lowdim-horizon", type=int, default=1,
+                   help="Number of historical state vectors to send per inference call "
+                        "(must match server's lowdim_horizon). The client sends the list only "
+                        "once the rolling history is full; until then the server repeats the "
+                        "most recent state to fill the horizon.")
     p.add_argument("--frame-capture-hz", type=float, default=5.0,
                    help="Rate at which frames are captured into the rolling history during action execution")
 
