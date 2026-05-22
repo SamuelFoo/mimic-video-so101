@@ -4,3 +4,6 @@
 [submodule "mimic-video"]
 	path = mimic-video
 	url = https://github.com/SamuelFoo/mimic-video
+[submodule "cosmos-predict2.5"]
+	path = cosmos-predict2.5
+	url = https://github.com/pectumesor/cosmos-predict2.5.git
