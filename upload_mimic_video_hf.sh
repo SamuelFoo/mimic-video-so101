@@ -10,14 +10,14 @@
 
 set -euo pipefail
 
-RUN_DIR="/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128_20260517_111323/vam/lerobot/w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128"
+RUN_DIR="/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128_20260522_191806/vam/lerobot/w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128"
 CKPT_DIR="$RUN_DIR/checkpoints"
 DATA_DIR="/ephemeral/robot_learning_project/staging/mimic-video"
 N_CHECKPOINTS=5
 HF_ORG="robot-learning"
 CONDA_ENV="${CONDA_ENV:-lerobot}"
 # Set to "true" to also upload zarr datasets (training machines only).
-# .statistics_cache is always uploaded regardless (needed for inference).
+# .statistics_cache and .latent_cache are always uploaded regardless.
 UPLOAD_DATA="${UPLOAD_DATA:-false}"
 
 # RUN_NAME is the timestamped run dir (3 levels up from EXPERIMENT in the train_mimic_video.sh layout).
@@ -85,6 +85,15 @@ hf upload \
     "$DATA_REL" \
     --repo-type model \
     --include ".statistics_cache/**"
+
+# Always upload .latent_cache — lets resumed training skip VAE precompute.
+echo "==> Uploading .latent_cache from $DATA_DIR -> $DATA_REL"
+hf upload \
+    "$HF_REPO" \
+    "$DATA_DIR" \
+    "$DATA_REL" \
+    --repo-type model \
+    --include ".latent_cache/**"
 
 if [[ "$UPLOAD_DATA" == "true" ]]; then
     echo "==> Uploading zarr datasets from $DATA_DIR -> $DATA_REL"

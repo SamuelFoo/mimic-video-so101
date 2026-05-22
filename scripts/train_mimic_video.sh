@@ -43,12 +43,12 @@ VAL_RUN_GENERATED_VIDEO="${VAL_RUN_GENERATED_VIDEO:-False}"
 # skip validation to avoid iterating nothing.
 RUN_VALIDATION="${RUN_VALIDATION:-False}"
 
-SAVE_ITER="${SAVE_ITER:-50}"
+SAVE_ITER="${SAVE_ITER:-100}"
 
 # Warm-start: path to a model/iter_*.pt to initialize weights from.
 # Loads model weights only; optimizer/scheduler/iteration are reset.
 # Ignored if OUTPUT_DIR already contains a latest_checkpoint.txt (in-place resume wins).
-LOAD_PATH="${LOAD_PATH:-/ephemeral/robot_learning_project/checkpoints/action/iter_000003750.pt}"
+LOAD_PATH="${LOAD_PATH:-/ephemeral/robot_learning_project/checkpoints/action/iter_000001400_fused.pt}"
 
 # Action decoder architecture — author defaults from world2action_pipe.py.
 XATTN_VIDEO_PREFIX_LENGTH="${XATTN_VIDEO_PREFIX_LENGTH:-null}" # null = state_t in DiT; set to < state_t to slice
@@ -74,7 +74,7 @@ fi
 # default bsz128 experiment on 1 GPU the local batch is 128; on 2 GPUs it
 # would be 64. Increase EXPERIMENT to a bsz256 variant when scaling up.
 TRAIN_LOCAL_BATCH_SIZE="${TRAIN_LOCAL_BATCH_SIZE:-32}" # author: global_bsz / world_size (128 for bsz128 on 1 GPU)
-GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-2}" # author: 1
+GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-1}" # author: 1
 
 WANDB__SERVICE_WAIT="${WANDB__SERVICE_WAIT:-120}"
 WANDB_START_METHOD="${WANDB_START_METHOD:-thread}"
