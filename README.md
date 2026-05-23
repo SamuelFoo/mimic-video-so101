@@ -210,9 +210,11 @@ python scripts/precompute_reason1_embeddings.py \
     --dataset_dirs \
         staging/mimic-video/ex1_all_v4-cosmos-video \
         staging/mimic-video/ex2_all_v4-cosmos-video \
-        staging/mimic-video/ex3_all-cosmos-video \
-    --predict2_checkpoint \
-        ~/.cache/huggingface/hub/models--nvidia--Cosmos-Predict2.5-2B/snapshots/<sha>/base/pre-trained/<uuid>_ema_bf16.pt \
+        staging/mimic-video/ex3-1-blue_all-cosmos-video \
+        staging/mimic-video/ex3-2-blue_all-cosmos-video \
+        staging/mimic-video/ex3-1-orange_all-cosmos-video \
+        staging/mimic-video/ex3-2-orange_all-cosmos-video \
+    --predict2_checkpoint ~/.cache/huggingface/hub/models--nvidia--Cosmos-Predict2.5-2B/snapshots/f176dc95b4a70f53ce01c4b302851595e7322b00/base/pre-trained/d20b7120-df3e-4911-919d-db6e08bad31c_ema_bf16.pt \
     --batch_size 4
 ```
 
@@ -238,11 +240,20 @@ Useful env-var overrides:
 - `TRAIN_LOCAL_BATCH_SIZE=1` — per-GPU batch size (effective = × GPUs × grad_accum)
 - `GRAD_ACCUM_ITER=4` — gradient accumulation steps
 - `SAVE_ITER=500` — checkpoint cadence
-- `LOAD_PATH=/path/to/checkpoint.pt` — warm-start from a local `.pt` file
+- `LOAD_PATH=/path/to/checkpoint/iter_<iter_number>` — to pass a custom .distcp model weights
 - `WANDB_PROJECT`, `WANDB_ENTITY`, `WANDB_MODE=offline`
 - `GPUS_PER_NODE`, `NNODES`, `MASTER_PORT` for distributed training
 
 Checkpoints land in `runs/cosmos_video_v25/<EXPERIMENT>_<TIMESTAMP>/`.
+
+## If Triton Cache crashes
+# 1. Clear the Triton inductor cache (stale compiled kernels)
+rm -rf /tmp/torchinductor_shadeform/
+
+# 2. Resume from the saved checkpoint
+LOAD_PATH=/ephemeral/robot_learning_project/runs/cosmos_video_v25/predict2_v2w_lora_rank32_ex1_ex2_ex3_merged_2026-05-23_11-20-06/.../iter_000000700 \
+bash scripts/train_cosmos_video_v25.sh
+
 
 **Key design decisions:**
 
