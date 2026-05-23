@@ -6,12 +6,13 @@
 #   1. uv sync the mimic-video venv
 #   2. pin zarr<3 in the lerobot conda env (if present)
 #   3. wandb + hf login (interactive, skipped if already authenticated)
-#   4. download Cosmos checkpoints
-#   5. download ex1_merged-cosmos-video + ex2_merged-cosmos-video datasets
+#   4. download Cosmos checkpoints (mimic-video)
+#   5. set up cosmos-predict2.5 venv (Python 3.10 + cu128)
+#   6. download Cosmos-Predict2.5-2B + Cosmos-Reason1-7B checkpoints
 #
-# Stops before any pipeline run. After this finishes, activate the venv
-# with `source mimic-video/model/.venv/bin/activate` and run
-# scripts/process_lerobot.sh / scripts/train_cosmos_video.sh / etc.
+# Stops before any pipeline run. After this finishes:
+#   - mimic-video venv:       source mimic-video/model/.venv/bin/activate
+#   - cosmos-predict2.5 venv: source cosmos-predict2.5/.venv/bin/activate
 
 set -euo pipefail
 
@@ -99,6 +100,27 @@ echo "==> [4/5] Download Cosmos checkpoints"
 (cd mimic-video/model && python scripts/download_checkpoints.py)
 
 
+# ---- 5. cosmos-predict2.5 venv (Python 3.10 + cu128) -----------------------
+echo "==> [5/6] Set up cosmos-predict2.5 venv"
+# flash-attn only ships a cp310 wheel, so Python 3.10 is required.
+COSMOS_DIR="${REPO_ROOT}/cosmos-predict2.5"
+echo "3.10" > "${COSMOS_DIR}/.python-version"
+(
+    cd "${COSMOS_DIR}"
+    UV_PYTHON=/usr/bin/python3.10 uv sync --extra=cu128
+)
+echo "  cosmos-predict2.5 venv ready."
+
+# ---- 6. Download Cosmos-Predict2.5-2B and Cosmos-Reason1-7B ----------------
+echo "==> [6/6] Download Cosmos-Predict2.5-2B and Cosmos-Reason1-7B checkpoints"
+echo "  NOTE: nvidia/Cosmos-Predict2.5-2B is a gated model."
+echo "  Request access at https://huggingface.co/nvidia/Cosmos-Predict2.5-2B before running."
+source "${COSMOS_DIR}/.venv/bin/activate"
+uvx 'hf>=1.3.5' download nvidia/Cosmos-Predict2.5-2B --repo-type model --include 'base/pre-trained/*'
+uvx 'hf>=1.3.5' download nvidia/Cosmos-Reason1-7B --repo-type model --include '*'
+deactivate
+
 echo
-echo "Setup complete. To use the mimic-video venv in your shell:"
-echo "  source mimic-video/model/.venv/bin/activate"
+echo "Setup complete."
+echo "  mimic-video venv:       source mimic-video/model/.venv/bin/activate"
+echo "  cosmos-predict2.5 venv: source cosmos-predict2.5/.venv/bin/activate"
