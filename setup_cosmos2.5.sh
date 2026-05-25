@@ -27,10 +27,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${REPO_ROOT}"
 
 # ---- 1. mimic-video venv ----------------------------------------------------
-curl -LsSf https://astral.sh/uv/install.sh | sh
 echo "==> [1/5] uv sync mimic-video venv"
 if ! command -v uv >/dev/null; then
-    echo "ERROR: uv not found. Install " >&2
+    echo "ERROR: uv not found. Install it from https://docs.astral.sh/uv/ first." >&2
     exit 1
 fi
 (cd mimic-video/model && uv sync --extra cu126)
@@ -100,8 +99,28 @@ fi
 echo "==> [4/5] Download Cosmos checkpoints"
 (cd mimic-video/model && python scripts/download_checkpoints.py)
 
-# Step 5: Download the ex1_merged-cosmos-video and ex2_merged-cosmos-video datasets via the Hugging Face Hub CLI, then extract them to /ephemeral/robot_learning_project.
-source mimic-video/model/.venv/bin/activate
 
-(cd /ephemeral/ && hf download robot-learning/mimic-video-tar --repo-type=dataset --local-dir . )
-zstd -d -T0 -c /ephemeral/mimic-video.tar.zst | tar -xvf - -C /ephemeral/robot_learning_project
+# ---- 5. cosmos-predict2.5 venv (Python 3.10 + cu128) -----------------------
+echo "==> [5/6] Set up cosmos-predict2.5 venv"
+# flash-attn only ships a cp310 wheel, so Python 3.10 is required.
+COSMOS_DIR="${REPO_ROOT}/cosmos-predict2.5"
+echo "3.10" > "${COSMOS_DIR}/.python-version"
+(
+    cd "${COSMOS_DIR}"
+    UV_PYTHON=/usr/bin/python3.10 uv sync --extra=cu128
+)
+echo "  cosmos-predict2.5 venv ready."
+
+# ---- 6. Download Cosmos-Predict2.5-2B and Cosmos-Reason1-7B ----------------
+echo "==> [6/6] Download Cosmos-Predict2.5-2B and Cosmos-Reason1-7B checkpoints"
+echo "  NOTE: nvidia/Cosmos-Predict2.5-2B is a gated model."
+echo "  Request access at https://huggingface.co/nvidia/Cosmos-Predict2.5-2B before running."
+source "${COSMOS_DIR}/.venv/bin/activate"
+uvx 'hf>=1.3.5' download nvidia/Cosmos-Predict2.5-2B --repo-type model --include 'base/pre-trained/*'
+uvx 'hf>=1.3.5' download nvidia/Cosmos-Reason1-7B --repo-type model --include '*'
+deactivate
+
+echo
+echo "Setup complete."
+echo "  mimic-video venv:       source mimic-video/model/.venv/bin/activate"
+echo "  cosmos-predict2.5 venv: source cosmos-predict2.5/.venv/bin/activate"
