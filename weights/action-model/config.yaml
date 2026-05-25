@@ -1,0 +1,466 @@
+checkpoint:
+  broadcast_via_filesystem: 'False'
+  dcp_allow_mismatched_size: 'False'
+  dcp_async_mode_enabled: 'False'
+  jit:
+    device: cuda
+    dtype: bfloat16
+    enabled: 'False'
+    input_shape: null
+    strict: 'True'
+  keys_not_to_resume: []
+  load_ema_to_reg: 'False'
+  load_path: /ephemeral/robot_learning_project/checkpoints/action/iter_000000600.pt
+  load_training_state: 'False'
+  only_load_scheduler_state: 'False'
+  save_iter: '100'
+  strict_resume: 'True'
+  type:
+    _target_: <class 'cosmos_predict2.checkpointer.Checkpointer'>
+    callbacks: null
+  verbose: 'True'
+data_config:
+  _target_: <function get_data_config at 0x77610c5256c0>
+  config_name: lerobot
+dataloader_train:
+  _target_: <class 'torch.utils.data.dataloader.DataLoader'>
+  batch_sampler: null
+  batch_size: '32'
+  collate_fn: null
+  dataset:
+    _target_: <function get_dataset at 0x77610700d480>
+    data_config:
+      _target_: <function get_data_config at 0x77610c5256c0>
+      config_name: lerobot
+    is_train: 'True'
+  drop_last: 'True'
+  generator: null
+  in_order: 'False'
+  multiprocessing_context: null
+  num_workers: '12'
+  persistent_workers: 'True'
+  pin_memory: 'True'
+  pin_memory_device: ''
+  prefetch_factor: '8'
+  sampler:
+    _target_: <class 'cosmos_predict2.data.resumable_sampler.ResumableDistributedSampler'>
+    dataset:
+      _target_: <function get_dataset at 0x77610700d480>
+      data_config:
+        _target_: <function get_data_config at 0x77610c5256c0>
+        config_name: lerobot
+      is_train: 'True'
+    num_replicas:
+      _target_: <function get_data_parallel_world_size at 0x77636bd31bd0>
+      partial_data_parallel: 'False'
+      with_context_parallel: 'False'
+    rank:
+      _target_: <function get_data_parallel_rank at 0x77636bd31cf0>
+      partial_data_parallel: 'False'
+      with_context_parallel: 'False'
+    seed: '0'
+    shuffle: 'True'
+  shuffle: null
+  timeout: '0'
+  worker_init_fn: null
+dataloader_val:
+  _target_: <class 'torch.utils.data.dataloader.DataLoader'>
+  batch_sampler: null
+  batch_size: '1'
+  collate_fn: null
+  dataset:
+    _target_: <function get_dataset at 0x77610700d480>
+    data_config:
+      _target_: <function get_data_config at 0x77610c5256c0>
+      config_name: lerobot
+    is_train: 'False'
+  drop_last: 'False'
+  generator: null
+  in_order: 'True'
+  multiprocessing_context: null
+  num_workers: '0'
+  persistent_workers: 'False'
+  pin_memory: 'False'
+  pin_memory_device: ''
+  prefetch_factor: null
+  sampler:
+    _target_: <class 'cosmos_predict2.data.resumable_sampler.ResumableDistributedSampler'>
+    dataset:
+      _target_: <function get_dataset at 0x77610700d480>
+      data_config:
+        _target_: <function get_data_config at 0x77610c5256c0>
+        config_name: lerobot
+      is_train: 'False'
+    num_replicas:
+      _target_: <function get_data_parallel_world_size at 0x77636bd31bd0>
+      partial_data_parallel: 'False'
+      with_context_parallel: 'False'
+    rank:
+      _target_: <function get_data_parallel_rank at 0x77636bd31cf0>
+      partial_data_parallel: 'False'
+      with_context_parallel: 'False'
+    seed: '0'
+    shuffle: 'True'
+  shuffle: null
+  timeout: '0'
+  worker_init_fn: null
+defaults:
+- _self_
+- data_config: null
+- video_dataset_train: null
+- video_dataset_val: null
+- dataloader_train: null
+- dataloader_val: null
+- world2action_pipe: null
+- optimizer: fusedadamw
+- scheduler: constant
+- model: null
+- callbacks:
+  - basic
+- net: null
+- ema: null
+- checkpoint: null
+- ckpt_type: null
+- experiment: null
+job:
+  group: lerobot
+  name: w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128
+  project: vam
+model:
+  _target_: <class 'cosmos_predict2.models.world2action_model.World2ActionModel'>
+  config:
+    _target_: cosmos_predict2.models.world2action_model.World2ActionModelConfig
+    action_dit_path: ''
+    data_config:
+      _target_: <function get_data_config at 0x77610c5256c0>
+      config_name: lerobot
+    ema:
+      enabled: false
+      iteration_shift: 0
+      rate: 0.1
+    fsdp_shard_size: '0'
+    init_lora_weights: 'True'
+    lora_alpha: '16'
+    lora_rank: '16'
+    lora_target_modules: q_proj,k_proj,v_proj,output_proj,mlp.layer1,mlp.layer2
+    loss_reduce: mean
+    loss_scale: '10.0'
+    pipe_config:
+      _target_: cosmos_predict2.configs.config_world2action.World2ActionPipelineConfig
+      ema:
+        enabled: false
+        iteration_shift: 0
+        rate: 0.1
+      net:
+        _target_: <class 'cosmos_predict2.models.world2action_dit.World2ActionDIT'>
+        adaln_lora_dim: '64'
+        atten_backend: flash_attn_no_cp
+        crossattn_emb_channels: '2048'
+        in_channels: '6'
+        max_horizon: '16'
+        mlp_ratio: '4.0'
+        model_channels: '512'
+        num_blocks: '12'
+        num_heads: '8'
+        out_channels: '6'
+        pair_timestep_feature_rank: '512'
+        sac_config:
+          every_n_blocks: 1
+          mode: none
+        use_adaln_lora: 'True'
+      precision: bfloat16
+      scheduler:
+        alpha: 1.0
+        beta: 1.0
+        num_denoising_steps: 10
+      xattn_layer_idx: '20'
+      xattn_video_prefix_length: null
+    precision: bfloat16
+    train_architecture: base
+    validation_num_sampling_steps: '12'
+    validation_run_generated_video: 'False'
+    video_dit_path: /ephemeral/robot_learning_project/mimic-video/model/checkpoints/video_backbone/iter_000000650_fused.pt
+    video_pipe_config:
+      adjust_video_noise: true
+      conditioner:
+        _target_: <class 'cosmos_predict2.conditioner.VideoConditioner'>
+        fps:
+          _target_: <class 'cosmos_predict2.conditioner.ReMapkey'>
+          dropout_rate: '0.0'
+          dtype: null
+          input_key: fps
+          output_key: fps
+        padding_mask:
+          _target_: <class 'cosmos_predict2.conditioner.ReMapkey'>
+          dropout_rate: '0.0'
+          dtype: null
+          input_key: padding_mask
+          output_key: padding_mask
+        text:
+          _target_: <class 'cosmos_predict2.conditioner.TextAttr'>
+          dropout_rate: '0.0'
+          input_key:
+          - obs/language_embedding
+        use_video_condition:
+          _target_: <class 'cosmos_predict2.conditioner.BooleanFlag'>
+          dropout_rate: '0.0'
+          input_key: fps
+          output_key: use_video_condition
+      conditioning_strategy: frame_replace
+      ema:
+        _target_: cosmos_predict2.configs.defaults.ema.EMAConfig
+        enabled: 'False'
+        iteration_shift: '0'
+        rate: '0.1'
+      guardrail_config:
+        checkpoint_dir: /ephemeral/robot_learning_project/mimic-video/model/checkpoints
+        enabled: false
+        offload_model_to_cpu: true
+      input_image_key: images
+      input_video_key: video
+      max_num_conditional_frames: 2
+      min_num_conditional_frames: 1
+      net:
+        _target_: <class 'cosmos_predict2.models.video2world_dit.MinimalV1LVGDiT'>
+        adaln_lora_dim: '256'
+        atten_backend: minimal_a2a
+        concat_padding_mask: 'True'
+        extra_per_block_abs_pos_emb: 'False'
+        in_channels: '16'
+        max_frames: '128'
+        max_img_h: '240'
+        max_img_w: '240'
+        model_channels: '2048'
+        num_blocks: '28'
+        num_heads: '16'
+        out_channels: '16'
+        patch_spatial: '2'
+        patch_temporal: '1'
+        pos_emb_cls: rope3d
+        pos_emb_interpolation: crop
+        pos_emb_learnable: 'True'
+        rope_enable_fps_modulation: 'False'
+        rope_h_extrapolation_ratio: '3.0'
+        rope_t_extrapolation_ratio: '1.0'
+        rope_w_extrapolation_ratio: '3.0'
+        sac_config:
+          _target_: cosmos_predict2.models.text2image_dit.SACConfig
+          every_n_blocks: '1'
+          mode: predict2_2b_720
+        use_adaln_lora: 'True'
+      precision: bfloat16
+      rectified_flow_loss_weight_uniform: true
+      rectified_flow_t_scaling_factor: 1.0
+      resize_online: false
+      resolution: '480'
+      sigma_conditional: 0.0001
+      sigma_data: 1.0
+      state_ch: 16
+      state_t: 6
+      text_encoder:
+        cls: !!python/object/apply:imaginaire.constants.TextEncoderClass
+        - t5
+        t5:
+          ckpt_path: /ephemeral/robot_learning_project/mimic-video/model/checkpoints/text_encoder/t5-11b
+          embed_dim: 1024
+          num_tokens: 512
+      timestamps:
+        is_forward: false
+        nfe: 35
+        order: 7.0
+        t_max: 80.0
+        t_min: 0.002
+      tokenizer:
+        _target_: <class 'cosmos_predict2.tokenizers.tokenizer.TokenizerInterface'>
+        chunk_duration: '81'
+        load_mean_std: 'False'
+        name: tokenizer
+        temporal_window: '16'
+        vae_pth: /ephemeral/robot_learning_project/mimic-video/model/checkpoints/video_backbone//tokenizer/tokenizer.pth
+model_parallel:
+  _cpu_offloading_context: null
+  async_tensor_model_parallel_allreduce: false
+  autocast_dtype: torch.float32
+  barrier_with_L1_time: true
+  batch_p2p_comm: true
+  batch_p2p_sync: true
+  bf16: false
+  context_parallel_size: 1
+  cpu_offloading: false
+  cpu_offloading_activations: false
+  cpu_offloading_num_layers: 0
+  cpu_offloading_weights: false
+  cross_entropy_fusion_impl: native
+  cross_entropy_loss_fusion: false
+  deallocate_pipeline_outputs: false
+  defer_embedding_wgrad_compute: false
+  deterministic_mode: false
+  enable_autocast: false
+  expert_model_parallel_size: 1
+  expert_tensor_parallel_size: 1
+  finalize_model_grads_func: null
+  fp16: false
+  grad_scale_func: null
+  grad_sync_func: null
+  gradient_accumulation_fusion: false
+  hierarchical_context_parallel_sizes: null
+  microbatch_group_size_per_vp_stage: 1
+  moe_extended_tp: false
+  no_sync_func: null
+  num_microbatches_with_partial_activation_checkpoints: null
+  overlap_p2p_comm: false
+  overlap_p2p_comm_warmup_flush: false
+  param_sync_func: null
+  params_dtype: torch.float32
+  perform_initialization: true
+  pipeline_dtype: null
+  pipeline_model_parallel_comm_backend: null
+  pipeline_model_parallel_size: 1
+  pipeline_model_parallel_split_rank: null
+  sequence_parallel: false
+  tensor_model_parallel_size: 1
+  timers: null
+  tp_comm_atomic_ag: false
+  tp_comm_atomic_rs: false
+  tp_comm_bootstrap_backend: nccl
+  tp_comm_bulk_dgrad: true
+  tp_comm_bulk_wgrad: true
+  tp_comm_overlap: false
+  tp_comm_overlap_ag: true
+  tp_comm_overlap_disable_fc1: false
+  tp_comm_overlap_disable_qkv: false
+  tp_comm_overlap_rs: true
+  tp_comm_overlap_rs_dgrad: false
+  tp_comm_split_ag: true
+  tp_comm_split_rs: true
+  use_cpu_initialization: false
+  use_ring_exchange_p2p: false
+  use_te_rng_tracker: false
+  variable_seq_lengths: false
+  virtual_pipeline_model_parallel_size: null
+  wgrad_deferral_limit: 0
+optimizer:
+  _target_: <function get_base_optimizer at 0x7760f75fe050>
+  betas:
+  - '0.9'
+  - '0.99'
+  capturable: 'True'
+  eps: 1e-08
+  lr: '9.999999999999999e-05'
+  master_weights: 'True'
+  model: null
+  optim_type: fusedadam
+  weight_decay: '0.1'
+scheduler:
+  _target_: <class 'cosmos_predict2.functional.lr_scheduler.LambdaLinearScheduler'>
+  cycle_lengths:
+  - '500000'
+  f_max:
+  - '1'
+  f_min:
+  - '0.2'
+  f_start:
+  - 1e-06
+  verbosity_interval: '0'
+  warm_up_steps:
+  - '1000'
+trainer:
+  callbacks:
+    device_monitor:
+      _target_: <class 'cosmos_predict2.callbacks.device_monitor.DeviceMonitor'>
+      every_n: '1000'
+      log_memory_detail: 'True'
+      step_size: '1'
+    ema:
+      _target_: <class 'imaginaire.utils.callback.EMAModelCallback'>
+      config: null
+      trainer: null
+    grad_clip:
+      _target_: <class 'cosmos_predict2.callbacks.grad_clip.GradClip'>
+      clip_norm: '10.0'
+      force_finite: 'True'
+      log_wandb: 'False'
+    iter_speed:
+      _target_: <class 'cosmos_predict2.callbacks.iter_speed.IterSpeed'>
+      every_n: '1000'
+      hit_thres: '5'
+    low_prec:
+      _target_: <class 'imaginaire.utils.callback.LowPrecisionCallback'>
+      config: null
+      trainer: null
+      update_iter: '1'
+    manual_gc:
+      _target_: <class 'imaginaire.callbacks.manual_gc.ManualGarbageCollection'>
+      every_n: '5'
+      warm_up: '5'
+    progress_bar:
+      _target_: <class 'imaginaire.utils.callback.ProgressBarCallback'>
+      config: null
+      trainer: null
+    wandb:
+      _target_: <class 'cosmos_predict2.callbacks.wandb_logger.WandBLogger'>
+      enabled: 'True'
+      entity: robot-learning-wm
+      log_every_n: '1'
+      mode: online
+      project: mimic-video
+  cudnn:
+    benchmark: 'True'
+    deterministic: 'False'
+  ddp:
+    broadcast_buffers: 'True'
+    find_unused_parameters: 'False'
+    static_graph: 'True'
+  distributed_parallelism: ddp
+  grad_accum_iter: '1'
+  grad_scaler_args:
+    enabled: 'False'
+  logging_iter: '1000'
+  max_iter: '500000'
+  max_val_iter: '8'
+  memory_format: torch.preserve_format
+  profiling:
+    enable_memory_snapshot: 'False'
+    enable_profiling: 'False'
+    first_n_rank: '4'
+    profile_freq: '1'
+    profile_memory: 'True'
+    record_shape: 'True'
+    with_modules: 'True'
+    with_stack: 'True'
+  run_validation: 'False'
+  seed: '0'
+  timeout_period: '999999999'
+  type: <class 'imaginaire.trainer.ImaginaireTrainer'>
+  validation_iter: '1000'
+video_dataset_train: null
+video_dataset_val: null
+world2action_pipe:
+  _target_: cosmos_predict2.configs.config_world2action.World2ActionPipelineConfig
+  ema:
+    enabled: false
+    iteration_shift: 0
+    rate: 0.1
+  net:
+    _target_: <class 'cosmos_predict2.models.world2action_dit.World2ActionDIT'>
+    adaln_lora_dim: '64'
+    atten_backend: flash_attn_no_cp
+    crossattn_emb_channels: '2048'
+    in_channels: '6'
+    max_horizon: '16'
+    mlp_ratio: '4.0'
+    model_channels: '512'
+    num_blocks: '12'
+    num_heads: '8'
+    out_channels: '6'
+    pair_timestep_feature_rank: '512'
+    sac_config:
+      every_n_blocks: 1
+      mode: none
+    use_adaln_lora: 'True'
+  precision: bfloat16
+  scheduler:
+    alpha: 1.0
+    beta: 1.0
+    num_denoising_steps: 10
+  xattn_video_prefix_length: null
