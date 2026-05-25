@@ -89,6 +89,7 @@ export WANDB_DIR
 export WANDB__SERVICE_WAIT
 export WANDB_START_METHOD
 export IMAGINAIRE_OUTPUT_ROOT="${OUTPUT_DIR}"
+export VIDEO_DIT_PATH
 mkdir -p "${HF_HOME}" "${TORCH_HOME}" "${WANDB_DIR}" "${OUTPUT_DIR}"
 
 source "${MODEL_DIR}/.venv/bin/activate"
