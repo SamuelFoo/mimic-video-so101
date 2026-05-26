@@ -175,6 +175,7 @@ torchrun \
        dataloader_train.prefetch_factor="${DATALOADER_PREFETCH_FACTOR}" \
        dataloader_train.persistent_workers="${DATALOADER_PERSISTENT_WORKERS}" \
        dataloader_val.num_workers="${VAL_DATALOADER_NUM_WORKERS}" \
+       checkpoint.strict_resume="${STRICT_RESUME:-True}" \
        job.name="${EXPERIMENT}"
 
 echo "=== Training Complete ==="
