@@ -7,3 +7,6 @@
 [submodule "cosmos-predict2.5"]
 	path = cosmos-predict2.5
 	url = https://github.com/pectumesor/cosmos-predict2.5.git
+[submodule "mimic-video-so101"]
+	path = mimic-video-so101
+	url = git@github.com:pectumesor/mimic-video-so101.git
