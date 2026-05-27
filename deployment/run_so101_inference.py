@@ -46,6 +46,7 @@ except ImportError:
 
 # lerobot
 from lerobot.cameras.opencv import OpenCVCameraConfig
+from lerobot.cameras.configs import Cv2Backends
 from lerobot.robots.so_follower import SO101Follower
 from lerobot.robots.so_follower.config_so_follower import SOFollowerRobotConfig
 
@@ -234,11 +235,19 @@ def interpolate_actions(actions: np.ndarray, duration_s: float, rate_hz: float) 
 
 
 def make_robot(args: argparse.Namespace) -> SO101Follower:
+    camera_options: dict[str, Any] = {}
+    if args.camera_fourcc:
+        camera_options["fourcc"] = args.camera_fourcc
+    if args.camera_backend:
+        camera_options["backend"] = {
+            "v4l2": Cv2Backends.V4L2,
+        }[args.camera_backend]
     cam_cfg = OpenCVCameraConfig(
         index_or_path=args.camera_index,
         fps=args.camera_fps,
         width=args.camera_width,
         height=args.camera_height,
+        **camera_options,
     )
     robot_cfg = SOFollowerRobotConfig(
         id=args.robot_id,
@@ -472,6 +481,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--camera-height", type=int, default=480)
     p.add_argument("--camera-fps", type=int, default=30,
                    help="Camera capture fps. The model conditions at 5 Hz; capture fps just needs to be high enough.")
+    p.add_argument("--camera-fourcc", default=None,
+                   help="Optional OpenCV capture format, for example MJPG. Defaults to OpenCV/LeRobot selection.")
+    p.add_argument("--camera-backend", choices=("v4l2",), default=None,
+                   help="Optional OpenCV capture backend. Use v4l2 for /dev/video* cameras in Linux or WSL.")
     p.add_argument("--display", action=argparse.BooleanOptionalAction, default=True,
                    help="Show the live camera feed in an OpenCV window. "
                         "Press the record key (default 'r') in the window to toggle MP4 recording.")
