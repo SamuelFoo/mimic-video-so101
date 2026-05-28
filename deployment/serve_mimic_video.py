@@ -78,7 +78,10 @@ def _action_net_overrides(action_config_path: pathlib.Path) -> list[str]:
 
     with action_config_path.open() as f:
         saved = yaml.load(f, Loader=_IgnorePyTagsLoader)
-    net_cfg = saved.get("world2action_pipe", {}).get("net", {})
+    # Training runs may dump the pipe config under "action_pipe" (older naming)
+    # or "world2action_pipe" (experiment-config naming); check both.
+    pipe_cfg = saved.get("world2action_pipe") or saved.get("action_pipe") or {}
+    net_cfg = pipe_cfg.get("net", {})
     overrides: list[str] = []
     for key, value in net_cfg.items():
         if key in _SKIP_NET_KEYS or not isinstance(value, (str, int, float, bool)):
