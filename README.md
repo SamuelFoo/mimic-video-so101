@@ -167,6 +167,104 @@ Useful env-var overrides:
 
 Runs land in `runs/mimic_video/<EXPERIMENT>_<TIMESTAMP>/`.
 
+### Video Model Finetuning — Cosmos-Predict2.5 (Video2World v2.5)
+
+End-to-end pipeline for finetuning the Cosmos-Predict2.5 2B video backbone with Reason1 embeddings.
+Uses LoRA and pre-projected conditioning embeddings (no Reason1-7B at training time).
+All commands run from the repo root.
+
+**Environment:** `cosmos-predict2.5/.venv` (Python 3.10, set up by `./setup.sh`).
+
+---
+
+**1. Convert raw recordings to zarr.** Same as inference — skip if already done.
+
+```bash
+./scripts/process_lerobot.sh
+```
+
+---
+
+**2. Build the cosmos-video data layout** (`video/` + `metas/`).
+
+```bash
+EX_TYPE=ex1 SKIP_T5=true ./scripts/prepare_video_finetune_data.sh
+```
+
+`SKIP_T5=true` skips T5 embedding generation — we use Reason1 embeddings instead (next step).
+The script writes `staging/mimic-video/<DATASET_NAME>-cosmos-video/video/` and `metas/`.
+
+Repeat for each experiment type (`EX_TYPE=ex2`, `EX_TYPE=ex3`, …).
+
+---
+
+**3. Pre-compute Reason1 + crossattn\_proj embeddings** (`reason1_proj/`).
+
+Runs Reason1-7B (Qwen2.5-VL-7B FULL\_CONCAT, 100 352-dim) and the frozen `crossattn_proj`
+linear from the 2B checkpoint offline, storing `[n_tokens, 1024]` float16 pickles.
+This removes ~200 MB of weights and ~98 MB of per-step conditioning tensors from GPU memory.
+
+```bash
+source cosmos-predict2.5/.venv/bin/activate
+python scripts/precompute_reason1_embeddings.py \
+    --dataset_dirs \
+        staging/mimic-video/ex1_all_v4-cosmos-video \
+        staging/mimic-video/ex2_all_v4-cosmos-video \
+        staging/mimic-video/ex3-1-blue_all-cosmos-video \
+        staging/mimic-video/ex3-2-blue_all-cosmos-video \
+        staging/mimic-video/ex3-1-orange_all-cosmos-video \
+        staging/mimic-video/ex3-2-orange_all-cosmos-video \
+    --predict2_checkpoint ~/.cache/huggingface/hub/models--nvidia--Cosmos-Predict2.5-2B/snapshots/f176dc95b4a70f53ce01c4b302851595e7322b00/base/pre-trained/d20b7120-df3e-4911-919d-db6e08bad31c_ema_bf16.pt \
+    --batch_size 4
+```
+
+The script deduplicates captions, so datasets where all episodes share one caption (common
+for task-specific splits) complete in seconds. Output: `<dataset_dir>/reason1_proj/*.pickle`.
+
+---
+
+**4. Run finetuning.**
+
+Experiment names follow `predict2_v2w_lora_rank<R>_<DATASET_NAME>` and are registered in
+[`cosmos_predict2/experiments/base/mimic_video.py`](cosmos-predict2.5/cosmos_predict2/experiments/base/mimic_video.py).
+
+```bash
+DATASET_NAME=ex1_all_v4 LORA_RANK=32 ./scripts/train_cosmos_video_v25.sh
+```
+
+Useful env-var overrides:
+
+- `DATASET_NAME` — key from `_DATASET_CFGS` in `mimic_video.py` (e.g. `ex1_all_v4`, `ex1_ex2_ex3_merged`)
+- `LORA_RANK` — 32, 64, or 128
+- `MAX_ITER=50000` — stop earlier for iteration testing
+- `TRAIN_LOCAL_BATCH_SIZE=1` — per-GPU batch size (effective = × GPUs × grad_accum)
+- `GRAD_ACCUM_ITER=4` — gradient accumulation steps
+- `SAVE_ITER=500` — checkpoint cadence
+- `LOAD_PATH=/path/to/checkpoint/iter_<iter_number>` — to pass a custom .distcp model weights
+- `WANDB_PROJECT`, `WANDB_ENTITY`, `WANDB_MODE=offline`
+- `GPUS_PER_NODE`, `NNODES`, `MASTER_PORT` for distributed training
+
+Checkpoints land in `runs/cosmos_video_v25/<EXPERIMENT>_<TIMESTAMP>/`.
+
+## If Triton Cache crashes
+# 1. Clear the Triton inductor cache (stale compiled kernels)
+rm -rf /tmp/torchinductor_shadeform/
+
+# 2. Resume from the saved checkpoint
+LOAD_PATH=/ephemeral/robot_learning_project/runs/cosmos_video_v25/predict2_v2w_lora_rank32_ex1_ex2_ex3_merged_2026-05-23_11-20-06/.../iter_000000700 \
+bash scripts/train_cosmos_video_v25.sh
+
+
+**Key design decisions:**
+
+- `text_encoder_config=None` — Reason1-7B is not loaded at training time; embeddings are read from disk
+- `use_crossattn_projection=False` — the `crossattn_proj` linear is not part of the training graph; its output is already stored in `reason1_proj/`
+- `embedding_subdir="reason1_proj"` — `MimicVideoDataset` reads from `reason1_proj/` instead of `t5_xxl/`
+- LoRA targets: `q_proj, k_proj, v_proj, output_proj, mlp.layer1, mlp.layer2`
+- 5 conditioning frames (`obs_history=5`, `min/max_num_conditional_frames=5`)
+
+---
+
 ### Mimic-Video Inference
 
 ```bash

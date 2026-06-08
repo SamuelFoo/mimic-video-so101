@@ -163,3 +163,11 @@ lerobot-teleoperate \
     --teleop.id=my_awesome_leader_arm \
     --display_data=true
 ```
+
+### Extract compressed data
+
+```bash
+zstd -d -T0 -c /ephemeral/robot_learning_project/mimic-video.tar.zst | tar -xvf - -C /ephemeral/robot_learning_project
+````
+
+
