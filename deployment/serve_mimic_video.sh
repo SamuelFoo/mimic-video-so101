@@ -30,8 +30,8 @@ CHECKPOINT_DIR="${MIMIC_VIDEO_CHECKPOINT_DIR:-${MODEL_DIR}/checkpoints}"
 EXPERIMENT_NAME="${EXPERIMENT_NAME:-w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128}"
 
 # Video backbone
-VIDEO_MODEL_PATH="${VIDEO_MODEL_PATH:-${REPO_ROOT}/checkpoints/video/iter_000000650_fused.pt}"
-ACTION_MODEL_PATH="${ACTION_MODEL_PATH:-${REPO_ROOT}/checkpoints/action/iter_000001400_fused.pt}"
+VIDEO_MODEL_PATH="${VIDEO_MODEL_PATH:-${REPO_ROOT}/checkpoints/video/iter_000001410_fused.pt}"
+ACTION_MODEL_PATH="${ACTION_MODEL_PATH:-${REPO_ROOT}/checkpoints/action/iter_000004900.pt}"
 
 # ---- Pipeline shape: must match the action checkpoint above ---------------
 # The current action ckpt (iter_000002000) was trained against a state_t=16

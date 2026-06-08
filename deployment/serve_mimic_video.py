@@ -55,7 +55,11 @@ log = logging.getLogger("mimic-video-server")
 # ---------------------------------------------------------------------------
 
 _NET_OVERRIDE_PREFIXES = ("world2action_pipe.net", "model.config.pipe_config.net")
-_SKIP_NET_KEYS = {"_target_", "sac_config"}  # _target_ is a class import; sac_config is a struct
+_SKIP_NET_KEYS = {
+    "_target_",   # class import, not a scalar override
+    "sac_config", # nested struct, not a scalar override
+    "video_len_t", "video_len_h", "video_len_w",  # video backbone dims, not World2ActionDIT constructor args
+}
 
 
 def _action_net_overrides(action_config_path: pathlib.Path) -> list[str]:
@@ -354,13 +358,8 @@ def _run_step(
     input_vid = torch.from_numpy(images[None]).cuda().bfloat16()
     state_tensor = torch.from_numpy(lowdims[None]).cuda().bfloat16()
 
-    # Video2World2ActionPipeline requires stop_after_step to be set — the video
-    # backbone only returns the (crossattn_emb, video_sigma) tuple at that step.
-    # Falls back to num_sampling_step - 1 (near-fully-denoised, last in-loop step):
-    # the post-loop "clean pass" branch in video2world.generate_video returns a
-    # 0-D sigma_min that crashes the caller's `.unsqueeze(1)`. The in-loop
-    # branch returns a 1-D sigma, which works. Lower it to trade quality for
-    # latency.
+    # stop_after_step controls how many video DiT steps run before the action
+    # decoder reads the hidden states. 0 = just one forward pass.
     effective_stop = stop_after_step if stop_after_step is not None else max(0, num_sampling_step - 1)
 
     t0 = time.time()
@@ -387,7 +386,7 @@ def _run_step(
                 pipeline, input_vid,
                 prompt=prompt,
                 num_sampling_step=num_sampling_step,
-                stop_after_step=effective_stop,
+                stop_after_step=num_sampling_step - 1,
                 seed=seed,
                 use_cuda_graphs=args.use_cuda_graphs,
                 out_dir=pathlib.Path(args.video_dir),
