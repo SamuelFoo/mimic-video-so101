@@ -8,11 +8,11 @@ set -euo pipefail
 
 # ---- Configure ------------------------------------------------------------
 SOURCES=(
-    "/ephemeral/robot_learning_project/staging/mimic-video/ex3-1-blue_all-zarr"
-    "/ephemeral/robot_learning_project/staging/mimic-video/ex3-1-orange_all-zarr"
+    "/ephemeral/mimic-video-so101/staging/mimic-video/ex3-1-blue_all-zarr"
+    "/ephemeral/mimic-video-so101/staging/mimic-video/ex3-1-orange_all-zarr"
     # add more source dirs here
 )
-DEST="/ephemeral/robot_learning_project/data/ex3-1_merged-zarr"
+DEST="/ephemeral/mimic-video-so101/data/ex3-1_merged-zarr"
 # ---------------------------------------------------------------------------
 
 if (( ${#SOURCES[@]} == 0 )); then

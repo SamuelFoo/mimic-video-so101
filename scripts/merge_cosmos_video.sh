@@ -2,13 +2,13 @@
 set -euo pipefail
 
 SOURCES=(
-    "/ephemeral/robot_learning_project/data/ex3-1-blue_all-cosmos-video"
-    "/ephemeral/robot_learning_project/data/ex3-2-blue_all-cosmos-video"
-    "/ephemeral/robot_learning_project/data/ex3-1-orange_all-cosmos-video"
-    "/ephemeral/robot_learning_project/data/ex3-2-orange_all-cosmos-video"
+    "/ephemeral/mimic-video-so101/data/ex3-1-blue_all-cosmos-video"
+    "/ephemeral/mimic-video-so101/data/ex3-2-blue_all-cosmos-video"
+    "/ephemeral/mimic-video-so101/data/ex3-1-orange_all-cosmos-video"
+    "/ephemeral/mimic-video-so101/data/ex3-2-orange_all-cosmos-video"
 )
 
-DEST="/ephemeral/robot_learning_project/data/ex3_all-cosmos-video"
+DEST="/ephemeral/mimic-video-so101/data/ex3_all-cosmos-video"
 
 if [[ -e "$DEST" ]]; then
     echo "ERROR: $DEST already exists. Remove it first or choose another DEST." >&2

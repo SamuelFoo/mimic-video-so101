@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-RUN_DIR="/ephemeral/robot_learning_project/runs/cosmos_video/v2w_ex1_ex2_merged_lora_rank32_lr5.623e-05_bsz32_2026-05-13_21-52-49/posttraining/video2world/v2w_ex1_ex2_merged_lora_rank32_lr5.623e-05_bsz32_35213"
+RUN_DIR="/ephemeral/mimic-video-so101/runs/cosmos_video/v2w_ex1_ex2_merged_lora_rank32_lr5.623e-05_bsz32_2026-05-13_21-52-49/posttraining/video2world/v2w_ex1_ex2_merged_lora_rank32_lr5.623e-05_bsz32_35213"
 CKPT_DIR="$RUN_DIR/checkpoints"
-DATA_DIR="/ephemeral/robot_learning_project/data"
+DATA_DIR="/ephemeral/mimic-video-so101/data"
 N_CHECKPOINTS=5
 HF_ORG="robot-learning"
 CONDA_ENV="${CONDA_ENV:-lerobot}"

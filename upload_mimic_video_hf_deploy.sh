@@ -18,9 +18,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODEL_DIR="${SCRIPT_DIR}/mimic-video/model"
 
-RUN_DIR="/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128_20260521_023248/vam/lerobot/w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128"
-VIDEO_DIT_PATH="/ephemeral/robot_learning_project/mimic-video/model/checkpoints/video_backbone/iter_000000650_fused.pt"
-DATA_DIR="/ephemeral/robot_learning_project/staging/mimic-video"
+RUN_DIR="/ephemeral/mimic-video-so101/runs/mimic_video/w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128_20260521_023248/vam/lerobot/w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128"
+VIDEO_DIT_PATH="/ephemeral/mimic-video-so101/mimic-video/model/checkpoints/video_backbone/iter_000000650_fused.pt"
+DATA_DIR="/ephemeral/mimic-video-so101/staging/mimic-video"
 
 HF_ORG="robot-learning"
 CONDA_ENV="${CONDA_ENV:-lerobot}"

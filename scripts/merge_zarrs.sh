@@ -1,4 +1,4 @@
-cd /ephemeral/robot_learning_project/data
+cd /ephemeral/mimic-video-so101/data
 
 mkdir -p ex3_all-zarr
 

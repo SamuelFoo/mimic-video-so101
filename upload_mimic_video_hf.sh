@@ -10,9 +10,9 @@
 
 set -euo pipefail
 
-RUN_DIR="/ephemeral/robot_learning_project/runs/mimic_video/w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128_20260522_191806/vam/lerobot/w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128"
+RUN_DIR="/ephemeral/mimic-video-so101/runs/mimic_video/w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128_20260522_191806/vam/lerobot/w2a_lerobot_iter_000000650_fused_lr1.000e-04_layer20_bsz128"
 CKPT_DIR="$RUN_DIR/checkpoints"
-DATA_DIR="/ephemeral/robot_learning_project/staging/mimic-video"
+DATA_DIR="/ephemeral/mimic-video-so101/staging/mimic-video"
 N_CHECKPOINTS=5
 HF_ORG="robot-learning"
 CONDA_ENV="${CONDA_ENV:-lerobot}"
@@ -25,7 +25,7 @@ RUN_NAME=$(basename "$(dirname "$(dirname "$(dirname "$RUN_DIR")")")")
 HF_REPO="$HF_ORG/$RUN_NAME"
 
 # Mirror local layout on HF: place DATA_DIR under its path relative to the repo root
-# (e.g. /ephemeral/robot_learning_project/staging/mimic-video -> staging/mimic-video).
+# (e.g. /ephemeral/mimic-video-so101/staging/mimic-video -> staging/mimic-video).
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_REL="${DATA_DIR#"$REPO_ROOT/"}"
 

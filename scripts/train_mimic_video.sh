@@ -48,7 +48,7 @@ SAVE_ITER="${SAVE_ITER:-100}"
 # Warm-start: path to a model/iter_*.pt to initialize weights from.
 # Loads model weights only; optimizer/scheduler/iteration are reset.
 # Ignored if OUTPUT_DIR already contains a latest_checkpoint.txt (in-place resume wins).
-LOAD_PATH="${LOAD_PATH:-/ephemeral/robot_learning_project/checkpoints/action/iter_000001400_fused.pt}"
+LOAD_PATH="${LOAD_PATH:-/ephemeral/mimic-video-so101/checkpoints/action/iter_000001400_fused.pt}"
 
 # Action decoder architecture — author defaults from world2action_pipe.py.
 XATTN_VIDEO_PREFIX_LENGTH="${XATTN_VIDEO_PREFIX_LENGTH:-null}" # null = state_t in DiT; set to < state_t to slice

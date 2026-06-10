@@ -1,64 +1,109 @@
-## Parameter table
+# Video and Action Model Parameters
 
-| Parameter | Where set | Current | After retrain (state_t=6) | Constraint |
-|---|---|---|---|---|
-| `obs.workspace_rgb.horizon` | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 5 | 5 | obs window stays — 1 s of past context regardless |
-| `action.workspace_rgb.horizon` | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | **56** | **16** | ⓐ must satisfy `obs + action ≡ 1 + 4n` for clean VAE compression |
-| `obs.joint_pos_lowdim.horizon` | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 1 | 1 | independent (just current joint state) |
-| `action.joint_action_lowdim.horizon` | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 15 | 15 | independent (output spec — number of actions predicted) |
-| `num_frames` (V2W finetune clip) | [`data_video.py`](../mimic-video/model/cosmos_predict2/configs/defaults/data_video.py) | **61** | **21** | ⓐ must equal `obs.workspace_rgb.horizon + action.workspace_rgb.horizon` |
-| `state_t` (DiT positional embeddings) | DiT model config (saved in checkpoint) | **16** | **6** | ⓑ must equal VAE latent count from `num_frames` |
-| VAE latent count | derived from `num_frames` via VAE math | `16 = 1 + (61-1)/4` | `6 = 1 + (21-1)/4` | ⓑ derived; matches `state_t` |
-| Action decoder cross-attn KV length | derived from DiT output | 16 timesteps | 6 timesteps | ⓒ inherits from DiT — no separate setting |
-| `obs.workspace_rgb.target_frequency` | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 5 | 5 | ⓓ must match V2W training rate |
-| `action.workspace_rgb.target_frequency` | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 5 | 5 | ⓓ must match V2W training rate |
-| V2W effective sampling rate | [`dataset_video.py`](../mimic-video/model/cosmos_predict2/data/dataset_video.py) (`step = data_fps/5`) | 5 Hz (hardcoded) | 5 Hz | ⓓ hardcoded in dataloader |
-| `obs.joint_pos_lowdim.target_frequency` | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 5 | 5 | independent (controls obs interpolation) |
-| `action.joint_action_lowdim.target_frequency` | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 5 | 5 | independent (controls action prediction rate) |
+The video and action models share several temporal parameters. Keep these
+values aligned when preparing data, finetuning the Video2World backbone, and
+training the action decoder.
 
-## Coupling constraints
+## Current Configuration
 
-### ⓐ Clip-shape chain
+| Parameter | Where set | Value | Purpose |
+|---|---|---:|---|
+| Video clip length | [`data_video.py`](../mimic-video/model/cosmos_predict2/configs/defaults/data_video.py) | 21 frames | Input length used to finetune the SO-101 Video2World datasets |
+| Observation image horizon | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 5 frames | Past visual context provided to the model |
+| Future image horizon | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 16 frames | Future visual sequence represented during action training |
+| Video latent timesteps (`state_t`) | [`config_video2world.py`](../mimic-video/model/cosmos_predict2/configs/config_video2world.py) | 6 | Temporal size of the VAE latent and DiT positional embeddings |
+| Image sampling frequency | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 5 Hz | Sampling rate for observation and future image sequences |
+| Joint observation horizon | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 1 | Current robot joint state |
+| Predicted action horizon | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 15 actions | Number of low-dimensional actions predicted per chunk |
+| Predicted action frequency | [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml) | 10 Hz | Execution rate of the predicted action sequence |
 
-`num_frames` in V2W finetune **must equal** `obs.workspace_rgb.horizon + action.workspace_rgb.horizon` in action decoder training. Both must hit a clean VAE shape (`1 + 4n`).
+The active temporal configuration is:
 
-- Current: both = 61 (5 + 56)
-- After retrain: both = 21 (5 + 16)
+```text
+5 observation frames + 16 future frames = 21 video frames
+21 video frames -> 6 VAE latent timesteps -> state_t = 6
+```
 
-### ⓑ Latent-shape chain
+The 61-frame entries in `data_video.py` belong to upstream Bridge and LIBERO
+datasets. The SO-101 datasets (`ex1_all_v4`, `ex2_all_v4`, and `ex3_all`) use
+21 frames.
 
-VAE latent count `1 + (num_frames - 1) / 4` **must equal** the DiT's `state_t`. The DiT bakes `state_t` into its positional embeddings, so this is set by V2W training and consumed downstream.
+## Required Constraints
 
-- 61 frames → 16 latents → `state_t=16`
-- 21 frames → 6 latents → `state_t=6`
+### Video Clip Length
 
-### ⓒ Cross-attn KV length
+The Video2World clip length must match the total image horizon used by the
+action model:
 
-The action decoder has **no separate setting** for cross-attn KV length. It cross-attends to whatever the DiT produces. Shrinking `state_t` automatically shrinks the action decoder's input — no changes to action decoder architecture needed.
+```text
+num_frames = obs.workspace_rgb.horizon + action.workspace_rgb.horizon
+```
 
-### ⓓ Rate chain
+For the current configuration:
 
-`workspace_rgb.target_frequency` (obs and action sides) **must equal** the rate the V2W DiT was trained at. That rate is **hardcoded to 5 Hz** in [`dataset_video.py`](../mimic-video/model/cosmos_predict2/data/dataset_video.py) via `step = data_fps / 5.0` — you can't change this without modifying that line and retraining the V2W DiT.
+```text
+21 = 5 + 16
+```
 
-## Independent parameters (no coupling)
+Cosmos VAE clips must have a length of the form `1 + 4n`. The corresponding
+latent length is:
 
-These can be tuned in isolation without breaking the video pipeline:
+```text
+state_t = 1 + (num_frames - 1) / 4
+```
 
-- `obs.joint_pos_lowdim.horizon` and `target_frequency` — joint-state obs is read directly by the action decoder, no V2W involvement.
-- `action.joint_action_lowdim.horizon` — your prediction count. Currently 15; could be 30 (longer chunks), 10 (shorter), etc. Only affects the action decoder's output head dims.
-- `action.joint_action_lowdim.target_frequency` — your prediction rate. Currently 5; could be 10 (Jonas's smoothness suggestion) at the cost of cache invalidation and retraining.
+For a 21-frame clip, this produces six latent timesteps.
 
-## Workflow for shrinking `state_t` (e.g., 16 → 6)
+### Video Checkpoint Compatibility
 
-1. **V2W side**:
-   - Change `num_frames=21` in [`data_video.py`](../mimic-video/model/cosmos_predict2/configs/defaults/data_video.py).
-   - Re-finetune V2W DiT with new `state_t=6` (architectural change to positional embeddings).
-   - Publish new `iter_*_fused.pt` checkpoint.
+`state_t` is part of the Video2World model configuration and positional
+embedding shape. An action-model run must therefore use a video checkpoint
+trained with the same clip length and `state_t`.
 
-2. **Action decoder side**:
-   - Change `action.workspace_rgb.horizon: 56 → 16` in [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml).
-   - Relax the VAE shim allowlist at [`precompute_video_latents.py:55`](../mimic-video/model/scripts/precompute_video_latents.py) (`{1, 5, 61}` → add the new T).
-   - Update `LATENT_SHAPE` at [`precompute_video_latents.py:67`](../mimic-video/model/scripts/precompute_video_latents.py) to match new latent timesteps.
-   - Point `VIDEO_DIT_PATH` at the new checkpoint.
-   - Re-run [`scripts/precompute_video_latents.sh`](../scripts/precompute_video_latents.sh) (stats_id changes).
-   - Re-train the action decoder.
+The action decoder does not configure its cross-attention sequence length
+separately. It consumes the temporal features produced by the video DiT.
+
+### Image Sampling Rate
+
+The observation and future image frequencies in `policy_io/lerobot.yaml` must
+match the effective sampling rate used during Video2World finetuning. The
+SO-101 configuration currently samples image sequences at 5 Hz.
+
+Changing this rate requires regenerating the training data and retraining the
+video backbone and action model.
+
+## Independently Tunable Parameters
+
+The following parameters are not tied to the Video2World latent length:
+
+- `obs.joint_pos_lowdim.horizon` controls how much joint-state history is read.
+- `obs.joint_pos_lowdim.target_frequency` controls joint-state interpolation.
+- `action.joint_action_lowdim.horizon` controls the number of predicted actions.
+- `action.joint_action_lowdim.target_frequency` controls the action execution
+  rate.
+
+Changing an action output horizon or frequency changes the action-model target
+and requires rebuilding its caches and retraining the action decoder, but does
+not require changing the video DiT architecture.
+
+## Changing the Video Clip Length
+
+To use a different clip length:
+
+1. Choose a frame count of the form `1 + 4n`.
+2. Set `num_frames` for the SO-101 datasets in
+   [`data_video.py`](../mimic-video/model/cosmos_predict2/configs/defaults/data_video.py).
+3. Set `state_t = 1 + (num_frames - 1) / 4` in
+   [`config_video2world.py`](../mimic-video/model/cosmos_predict2/configs/config_video2world.py).
+4. Finetune a new Video2World checkpoint with that configuration.
+5. Update the image horizons in
+   [`policy_io/lerobot.yaml`](../mimic-video/model/cosmos_predict2/configs/dataloading/policy_io/lerobot.yaml)
+   so their sum equals `num_frames`.
+6. Point `VIDEO_DIT_PATH` at the compatible Video2World checkpoint.
+7. Re-run [`precompute_video_latents.sh`](../scripts/precompute_video_latents.sh)
+   to rebuild the latent cache.
+8. Retrain the action decoder.
+
+The latent precomputation script derives its output shape from the active
+Video2World pipeline configuration, so no separate hard-coded latent shape
+needs to be updated.

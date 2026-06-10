@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# One-shot setup for robot_learning_project. Idempotent — safe to re-run.
+# One-shot setup. Idempotent — safe to re-run.
 #
 # Runs the env + auth + download steps from README.md:
 #   1. uv sync the mimic-video venv

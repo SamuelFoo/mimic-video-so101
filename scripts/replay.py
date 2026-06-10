@@ -144,8 +144,8 @@ def replay_kinematics_meshcat(dataset_id, urdf_path, mesh_dir, episode=0, fps=No
 
 if __name__ == "__main__":
     DATASET_ID = "/home/nielsen/codes/ex2_all"
-    URDF_PATH  = "/home/nielsen/codes/robot_learning_project/isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf/so_arm101.urdf"
-    MESH_DIR   = "/home/nielsen/codes/robot_learning_project/isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf"
+    URDF_PATH  = "/home/nielsen/codes/mimic-video-so101/isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf/so_arm101.urdf"
+    MESH_DIR   = "/home/nielsen/codes/mimic-video-so101/isaac_so_arm101/src/isaac_so_arm101/robots/trs_so101/urdf"
 
     parser = argparse.ArgumentParser(description="Replay SO-101 episode kinematics in Meshcat.")
     parser.add_argument("--episode", type=int, default=0, help="Episode index to replay (default: 0)")

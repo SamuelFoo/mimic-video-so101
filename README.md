@@ -67,7 +67,7 @@ Download the required dataset(s) to the `data/` folder, for example:
 
 ```bash
 source mimic-video/model/.venv/bin/activate
-cd ~/robot_learning_project/
+cd ~/mimic-video-so101/
 hf download robot-learning/Ex1_merged \
   --repo-type dataset \
   --local-dir data/ex1_merged
