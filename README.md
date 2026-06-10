@@ -1,3 +1,11 @@
+# mimic-video Deployed on the SO-101
+
+Please see the [original mimic-video project](https://mimic-video.github.io/).
+
+Completed as part of ETH Zurich's [robot learning course](https://cvg.ethz.ch/lectures/Robot-Learning/).
+
+https://github.com/user-attachments/assets/56233521-9789-4c53-8d19-83b7cf8fe523
+
 ## Quickstart
 
 ### Cloning Repo
