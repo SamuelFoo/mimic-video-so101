@@ -22,7 +22,7 @@ The prompts below are the deployment prompts defined in
 A black robotic arm is shown in a clean, modern indoor setting, positioned behind a dark green mat on a tabletop. The base of the robotic arm is fixed to the tabletop. On the mat, a white ball is positioned at the start location on the right side, while the goal region is marked by the smaller white circle on the left side. Two white horizontal lines define a straight corridor. Both the white ball and black gripper are rigid and non-deformable. A red static obstacle is placed in the bigger circle near the center of the corridor. The black robot gripper guides the white ball from right to left toward the goal circle. The white ball moves around the obstacle along a path that curves toward the front. The white ball leaves the corridor when going around the obstacle. In general, neither the white ball nor the black gripper touches or moves the red obstacle and the red obstacle remains stationary. The white ball may occasionally touch the red obstacle, and the black gripper responds by making controlled corrective adjustments to guide the white ball around the obstacle and toward the goal. The final frame shows the white ball inside the left goal circle, while the obstacle remains in its original position.
 </details>
 
-<video src="demos/ex2.mp4" controls width="478"></video>
+<video src="https://github.com/user-attachments/assets/e8128459-3926-4116-89d4-f35b3907bef7" controls width="478"></video>
 
 ### Blue Cube (`ex3-1-blue`)
 
@@ -30,7 +30,7 @@ A black robotic arm is shown in a clean, modern indoor setting, positioned behin
 A black robotic arm is shown in a clean, modern indoor setting, positioned behind a dark green mat on a tabletop. The base of the robotic arm is fixed to the tabletop. On the mat, a blue cube is positioned at the start location on the right side, while the goal region is marked by the smaller white circle on the left side. Two white horizontal lines define a straight corridor. Both the blue cube and black gripper are rigid and non-deformable. The black robot gripper guides the blue cube from right to left toward the goal circle. The blue cube is generally guided within the corridor. The blue cube may occasionally drift outside the corridor after contact, and the black gripper responds with controlled corrective adjustments to guide the blue cube back onto the intended path toward the goal circle. The final frame shows the blue cube inside the left goal circle.
 </details>
 
-<video src="demos/ex3-1.mp4" controls width="478"></video>
+<video src="https://github.com/user-attachments/assets/e41f531a-ceb7-4ee0-960b-b4199e369b2f" controls width="478"></video>
 
 ### Blue Cube With Obstacle (`ex3-2-blue`)
 
@@ -38,7 +38,7 @@ A black robotic arm is shown in a clean, modern indoor setting, positioned behin
 A black robotic arm is shown in a clean, modern indoor setting, positioned behind a dark green mat on a tabletop. The base of the robotic arm is fixed to the tabletop. On the mat, a blue cube is positioned at the start location on the right side, while the goal region is marked by the smaller white circle on the left side. Two white horizontal lines define a straight corridor. Both the blue cube and black gripper are rigid and non-deformable. A red static obstacle is placed in the bigger circle near the center of the corridor. The black robot gripper guides the blue cube from right to left toward the goal circle. The blue cube moves around the obstacle along a path that curves toward the front. The blue cube leaves the corridor when going around the obstacle. In general, neither the blue cube nor the black gripper touches or moves the red obstacle and the red obstacle remains stationary. The blue cube may occasionally touch the red obstacle, and the black gripper responds by making controlled corrective adjustments to guide the blue cube around the obstacle and toward the goal. The final frame shows the blue cube inside the left goal circle, while the obstacle remains in its original position.
 </details>
 
-<video src="demos/ex3-2.mp4" controls width="478"></video>
+<video src="https://github.com/user-attachments/assets/c17d0562-9366-47ba-8ff9-17e9f67e68e4" controls width="478"></video>
 
 ## Quickstart
 
