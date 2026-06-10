@@ -42,108 +42,180 @@ A black robotic arm is shown in a clean, modern indoor setting, positioned behin
 
 ## Quickstart
 
+For automated setup, run the helper from the repository root:
+
+```bash
+./setup.sh
+```
+
+Alternatively, follow the manual setup instructions below.
+
 ### Python Environments
 
-Install `mimic-video` dependencies. Requires `uv`.
+The Cosmos and mimic-video code requires Linux, Python 3.10, an NVIDIA GPU,
+and CUDA 12.6-compatible drivers. Install the model environment with `uv`:
 
 ```bash
 cd mimic-video/model
 uv sync --extra cu126
-source .venv/bin/activate
+uv pip install -r ../../deployment/requirements.txt
+cd ../..
 ```
 
-The `mimic-video` Python virtual environment can be sourced with
+Activate it from the repository root with:
 
 ```bash
 source mimic-video/model/.venv/bin/activate
 ```
 
-Create a separate `lerobot` conda environment using the lerobot setup guide on HuggingFace.
-Then pin zarr to the v2 line so the generated zarr episodes are readable by
-the `mimic-video` environment:
+Use a separate environment for LeRobot preprocessing and the robot client:
 
 ```bash
+conda create -n lerobot python=3.12
 conda activate lerobot
-pip install 'zarr<3' 'numcodecs<0.16'
+conda install -c conda-forge ffmpeg pinocchio
+pip install lerobot 'zarr<3' 'numcodecs<0.16' opencv-python meshcat
 ```
 
-Use the `lerobot` conda environment for preprocessing datasets and the `mimic-video` Python virtual environment for training.
+The `zarr<3` and `numcodecs<0.16` pins are required by the current
+`mimic-video` preprocessing pipeline.
 
 ### Auth
 
-In the `mimic-video` virtual environment, login to `wandb` and `hf`:
+Authenticate with Hugging Face and Weights & Biases in the model environment:
 
 ```bash
 source mimic-video/model/.venv/bin/activate
-wandb login
 hf auth login
+wandb login
 ```
 
-### Download
+### Checkpoints And Data
 
-Download the checkpoints
+Download the upstream Cosmos tokenizer, text encoder, and pretrained
+Video2World backbone:
 
 ```bash
 cd mimic-video/model
 source .venv/bin/activate
-python scripts/download_checkpoints.py
+python scripts/download_checkpoints.py --models pretrained_cosmos_bridge
+cd ../..
 ```
 
-Download the required dataset(s) to the `data/` folder, for example:
+The deployed SO-101 video model, action model, action configuration, and
+normalization statistics are published together. Download them from the
+repository root to preserve the expected `checkpoints/` layout:
 
 ```bash
-source mimic-video/model/.venv/bin/activate
-cd ~/mimic-video-so101/
-hf download robot-learning/Ex1_merged \
-  --repo-type dataset \
-  --local-dir data/ex1_merged
+hf download robot-learning/pushing_model --local-dir .
 ```
 
-Merge the dataset(s) into a single dataset (see `commands.md`).
+The training data is available as archives:
+
+```bash
+hf download robot-learning/mimic-video-tar \
+  --repo-type dataset \
+  --local-dir downloads/mimic-video-tar
+```
+
+After extraction, place raw LeRobot datasets under `data/` using the names in
+`DATASET_PAIRS` at the top of [process_lerobot.sh](scripts/process_lerobot.sh).
+For action-model training, place the resulting `*-zarr` directories anywhere
+under `staging/mimic-video/`; the action dataloader searches that directory
+recursively.
 
 ### Video Model Inference
 
-Run Video2World inference over the merged LeRobot dataset in three steps. All commands are run from the repo root.
+Run Video2World inference over a processed LeRobot dataset from the repository
+root.
 
-**1. Convert LeRobot to zarr and precompute T5 embeddings.** Uses the `lerobot` conda environment for the conversion and `mimic-video/model/.venv` for the embeddings. For proces_lerobot.sh, make sure that only the lerobot conda environment is on.
+**1. Convert LeRobot datasets to zarr and precompute T5 embeddings.**
+`process_lerobot.sh` processes the datasets listed in its `DATASET_PAIRS`
+array. Run it from the `lerobot` environment:
 
 ```bash
+conda activate lerobot
 ./scripts/process_lerobot.sh
 ```
 
-**2. Export zarr episodes to MP4 inputs and build the Video2World batch JSON.** Each run is written to a timestamped directory under `runs/video_inference/${DATASET_NAME}_<TIMESTAMP>/`, so successive runs do not overwrite each other. Optionally set `FRAME_FRACTION=0.5` to export only the first half of each episode.
+**2. Export zarr episodes and create the inference batch.** The default
+`FRAME_FRACTION=0.5` exports the first half of each episode; use
+`FRAME_FRACTION=1` for complete episodes.
 
 ```bash
-./scripts/export_video_inputs.sh
+EX_TYPE=ex1 DATASET_NAME=ex1_all_v4 ./scripts/export_video_inputs.sh
 ```
 
-**3. Run Video2World inference.** Uses `mimic-video/model/.venv`. Before running, set `RUN_DIR` (or `TIMESTAMP`) to point at the export you want to run inference on.
+The export command prints the timestamped `RUN_DIR`.
+
+**3. Run Video2World inference.** Set `RUN_DIR` to the directory created above
+and `VIDEO_DIT_PATH` to the desired video checkpoint:
 
 ```bash
-RUN_DIR=runs/video_inference/ex1_merged_2026-05-13_12-15-23 ./scripts/infer_video.sh
+RUN_DIR=runs/video_inference/ex1_all_v4_<TIMESTAMP> \
+VIDEO_DIT_PATH="$(pwd)/checkpoints/video/<video-checkpoint>.pt" \
+./scripts/infer_video.sh
 ```
 
-### Video Model Finetuning (ex1_merged)
+Set `EPISODE_STRIDE=1` to infer every exported episode; the default is every
+fifth episode.
 
-End-to-end pipeline for finetuning the Cosmos-Predict2 2B video backbone on the merged LeRobot dataset. Uses LoRA (rank 256) by default. All commands run from the repo root.
+### Video Model Finetuning
 
-**1. Convert LeRobot to zarr.** Same step as inference — skip if already done.
+The current SO-101 Video2World configuration uses 21-frame clips, five
+conditioning frames, and six VAE latent timesteps. See
+[docs/parameters.md](docs/parameters.md) before changing temporal parameters.
+
+**1. Prepare zarr datasets.** Run `process_lerobot.sh` as described above.
+The current configuration produces:
+
+- `ex1_all_v4-zarr`
+- `ex2_all_v4-zarr`
+- `ex3-1-blue_all-zarr`
+- `ex3-1-orange_all-zarr`
+- `ex3-2-blue_all-zarr`
+- `ex3-2-orange_all-zarr`
+
+**2. Build the Cosmos finetuning layout.** Run the preparation script for each
+dataset to create `video/`, `metas/`, and `t5_xxl/` directories. For example:
 
 ```bash
-./scripts/process_lerobot.sh
+EX_TYPE=ex1 DATASET_NAME=ex1_all_v4 ./scripts/prepare_video_finetune_data.sh
+EX_TYPE=ex2 DATASET_NAME=ex2_all_v4 ./scripts/prepare_video_finetune_data.sh
 ```
 
-**2. Build the Cosmos finetuning data layout.** Converts each `episode_*.zarr` into the `video/<ep>.mp4` + `metas/<ep>.txt` layout expected by `cosmos_predict2.data.dataset_video.Dataset`, then precomputes T5 embeddings into `t5_xxl/`. Writes to `data/${DATASET_NAME}-cosmos-video/`.
+Prepare the four Exercise 3 datasets in the same way, then merge them into
+`ex3_all-cosmos-video`. The merge scripts contain cluster-specific paths and
+must be adjusted for the local data root before use.
 
-```bash
-./scripts/prepare_video_finetune_data.sh
+Use `OVERWRITE=true` to rebuild existing outputs or `SKIP_T5=true` while
+iterating only on video extraction.
+
+**3. Verify the dataset entries.**
+[data_video.py](mimic-video/model/cosmos_predict2/configs/defaults/data_video.py)
+registers each Video2World dataset name and maps it to its prepared
+`*-cosmos-video` directory. The current SO-101 entries are `ex1_all_v4`,
+`ex2_all_v4`, and `ex3_all`; the `ex1_ex2_ex3_merged` entry combines all three
+with `MultiDataset`. Confirm that every `dataset_dir` points to the directories
+created in the previous step.
+
+The experiment grid in
+[video2world.py](mimic-video/model/cosmos_predict2/configs/experiment/video2world.py)
+automatically creates experiment names for every registered dataset and
+supported LoRA rank, learning rate, and batch size. With the current training
+defaults, the combined experiment is:
+
+```text
+v2w_ex1_ex2_ex3_merged_lora_rank32_lr5.623e-05_bsz64
 ```
 
-To re-run preprocessing after a config change: `OVERWRITE=true ./scripts/prepare_video_finetune_data.sh`. To skip T5 (e.g. iterating on the video extraction): `SKIP_T5=true ./scripts/prepare_video_finetune_data.sh`.
+If `DATASET_NAME`, `FINETUNE_DATA_DIR`, or the dataset mix changes, update
+`data_video.py` first and ensure the resulting experiment name matches one of
+the combinations generated by `video2world.py`.
 
-**3. Verify the dataset entry.** [data_video.py](mimic-video/model/cosmos_predict2/configs/defaults/data_video.py) registers `ex1_merged` with `dataset_dir=data/ex1_merged-cosmos-video`. The grid in [video2world.py](mimic-video/model/cosmos_predict2/configs/experiment/video2world.py) auto-creates the experiment `v2w_ex1_merged_lora_rank256_lr1.778e-04_bsz32`. If you change `DATASET_NAME` or `FINETUNE_DATA_DIR`, update the entry in `data_video.py` to match.
-
-**4. Run training.** Defaults to the `ex1_merged` experiment with WandB logging enabled. Each run gets a timestamped output dir at `runs/cosmos_video/<EXPERIMENT>_<TIMESTAMP>/`.
+**4. Run training.** The current defaults select LoRA rank 32, learning rate
+`5.623e-05`, local batch size 4, and 16 gradient-accumulation steps. The
+registered experiment carries the `bsz64` label:
 
 ```bash
 ./scripts/train_cosmos_video.sh
@@ -151,61 +223,88 @@ To re-run preprocessing after a config change: `OVERWRITE=true ./scripts/prepare
 
 Useful env-var overrides:
 
-- `EXPERIMENT=v2w_ex1_merged_lora_rank256_lr1.778e-04_bsz32`
-- `MAX_ITER=20000` — max training iterations
+- `EX_TYPE`, `DATASET_NAME`, `LORA_RANK`, `LR`, and `BSZ`
+- `MAX_ITER`, `SAVE_ITER`, and `LOGGING_ITER`
+- `TRAIN_LOCAL_BATCH_SIZE=4`, `GRAD_ACCUM_ITER=16`
 - `WANDB_PROJECT=cosmos-video-finetune`, `WANDB_ENTITY=...`, `WANDB_MODE=offline`
-- `VIDEO_DIT_PATH=...` — start from a different video checkpoint
 - `GPUS_PER_NODE`, `NNODES`, `MASTER_PORT` for distributed training
 
-**Gotchas**
-
-- _Num_frames must be 1, 5, or 61._ Set in [data_video.py](mimic-video/model/cosmos_predict2/configs/defaults/data_video.py). Use 5 to speed up finetuning iteration.
-- _Batch size cannot exceed the number of generated videos._ If `bsz` (set in [video2world.py](mimic-video/model/cosmos_predict2/configs/experiment/video2world.py)) is larger than the dataset size, training errors out — pick a smaller experiment or generate more videos.
+The pretrained backbone is read from
+`mimic-video/model/checkpoints/video_backbone/v2w_pretrained_cosmos.pt`.
+Replace or symlink that file to change the initialization checkpoint.
 
 ### Mimic-Video Policy Training
 
-Trains the action decoder on top of a frozen video backbone. The decoder cross-attends to layer-20 hidden states from a frozen Cosmos-Predict2 2B DiT and predicts low-dim actions. All commands run from the repo root.
+The action decoder cross-attends to layer-20 features from the frozen
+Video2World backbone and predicts 15 joint targets.
 
-**1. Convert LeRobot to zarr.** Same step as inference/finetuning — skip if already done.
+**1. Place zarr datasets.** Put the processed `*-zarr` directories below
+`staging/mimic-video/`, or set `MIMIC_VIDEO_DATASET_DIR` to another directory
+containing them.
 
-```bash
-./scripts/process_lerobot.sh
-```
+**2. Place a compatible video checkpoint.**
 
-**2. Place a video backbone checkpoint.** The default experiment expects `mimic-video/model/checkpoints/video_backbone/iter_000000375_fused.pt`. Symlink or copy your fused video DiT there, or set `VIDEO_DIT_PATH=/abs/path.pt` when invoking the scripts below. The pretrained Cosmos checkpoint (`v2w_pretrained_cosmos.pt`) and the registered LoRA-fused variants in [world2action_model.py](mimic-video/model/cosmos_predict2/configs/defaults/world2action_model.py) also work — just pick a matching `EXPERIMENT`.
+Override `VIDEO_DIT_PATH` and select the matching registered `EXPERIMENT` when
+using another checkpoint.
 
-**3. Precompute VAE latents (one-time, recommended).** Encodes every train + val sample's 61-frame raw video to `[16, 16, 60, 80]` latents and stores them under `${MIMIC_VIDEO_DATASET_DIR}/.latent_cache/` (default: `data/.latent_cache/`). The training step then loads latents via mmap and skips the per-step VAE encoder forward — the dominant memory hot-spot and a ~2-3× wall-clock saving. Cache is keyed by dataset config hash, so it auto-invalidates when the episode set or transforms change.
+**3. Precompute VAE latents.** The current 21-frame configuration produces
+`[16, 6, 60, 80]` latent tensors. Caches are written below
+`${MIMIC_VIDEO_DATASET_DIR}/.latent_cache/` and are keyed by the dataset
+configuration:
 
 ```bash
 ./scripts/precompute_video_latents.sh
 ```
 
-With the default LeRobot config, samples are anchored at 5 Hz to match the author's effective video rate while avoiding one near-duplicate sample per raw 30 Hz camera frame.
-
-**4. Run training.** Default experiment is `w2a_lerobot_iter_000000375_fused_lr1.000e-04_layer20_bsz128`, trained on the combined `ex1_merged + ex2_merged` zarr dirs.
+**4. Run training.**
+For a fresh run, clear the warm-start default:
 
 ```bash
-./scripts/train_mimic_video.sh
+LOAD_PATH=null ./scripts/train_mimic_video.sh
 ```
 
 Useful env-var overrides:
 
 - `EXPERIMENT=w2a_lerobot_<video_ckpt>_lr<...>_layer20_bsz<...>` — pick a different registered experiment (see [world2action.py](mimic-video/model/cosmos_predict2/configs/experiment/world2action.py))
 - `VIDEO_DIT_PATH=/abs/path.pt` — override the auto-resolved video backbone
-- `MIMIC_VIDEO_DATASET_DIR=/path/to/dir` — dir to glob `**/*.zarr` under (default `${REPO_ROOT}/data`). Both `.statistics_cache/` and `.latent_cache/` land inside it.
-- `TRAIN_LOCAL_BATCH_SIZE=16`, `GRAD_ACCUM_ITER=8` — per-GPU batch and accumulation; effective batch is product × world_size
-- `ACTION_MODEL_CHANNELS`, `ACTION_MODEL_BLOCKS`, `ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK`, `ACTION_MODEL_ADALN_LORA_DIM` — shrink the action decoder for tighter GPU budgets (the defaults are ~10× smaller than the author's reference config; see comments in [train_mimic_video.sh](scripts/train_mimic_video.sh))
-- `MAX_VAL_ITER=8` — cap the iter-0 validation pass; set to `null` for full validation
+- `MIMIC_VIDEO_DATASET_DIR=/path/to/dir` — directory searched recursively for zarr episodes
+- `TRAIN_LOCAL_BATCH_SIZE=32`, `GRAD_ACCUM_ITER=1`
+- `NUM_GPUS` — number of GPUs used on the local machine
+- `ACTION_MODEL_CHANNELS`, `ACTION_MODEL_BLOCKS`, `ACTION_MODEL_PAIR_TIMESTEP_FEATURE_RANK`, `ACTION_MODEL_ADALN_LORA_DIM`
+- `RUN_VALIDATION=True`, `MAX_VAL_ITER=8` — enable validation and cap its length
 - `WANDB_PROJECT=mimic-video`, `WANDB_ENTITY=...`, `WANDB_MODE=offline`
-- `GPUS_PER_NODE`, `NNODES`, `MASTER_PORT` for distributed training
 
 Runs land in `runs/mimic_video/<EXPERIMENT>_<TIMESTAMP>/`.
 
 ### Mimic-Video Inference
 
-```bash
-ssh -L 8000:localhost:8000 infer-2
+Run the model server in the model environment on the GPU machine. Set paths
+explicitly to the files downloaded from Hugging Face:
 
+```bash
+source mimic-video/model/.venv/bin/activate
+
+VIDEO_MODEL_PATH="$(pwd)/checkpoints/video/<video-checkpoint>.pt" \
+ACTION_MODEL_PATH="$(pwd)/checkpoints/action/<action-checkpoint>.pt" \
+DATASET_STATS="$(pwd)/checkpoints/dataset_statistics.json" \
+ACTION_CONFIG_PATH="$(pwd)/checkpoints/action/config.yaml" \
+./deployment/serve_mimic_video.sh
+```
+
+On the machine connected to the SO-101, run the SSH tunnel and robot client in
+**two separate shells**. Keep the SSH tunnel running while the client is in
+use.
+
+**Shell 1: open the SSH tunnel**
+
+```bash
+ssh -L 8000:localhost:8000 user@<gpu-host>
+```
+
+**Shell 2: run the robot client**
+
+```bash
+conda activate lerobot
 python deployment/run_so101_inference.py \
   --port /dev/ttyACM0 \
   --robot-id my_awesome_follower_arm \
@@ -217,6 +316,14 @@ python deployment/run_so101_inference.py \
   --meshcat
 ```
 
-Prompts are loaded from [config/deployment_prompts.json](config/deployment_prompts.json); select one with `--prompt-key` or override with `--prompt "..."`.
+The example sets `--max-relative-target 0`, which disables the per-step joint
+delta safety limit. Use a positive value such as `5` to enable that limit.
+`--stop-after-step 0` stops after the first video DiT forward pass, minimizing
+latency. Generally, keep `stop-after-step` low between `0` and `10` for best action model performance.
 
-A live camera window opens on the laptop by default — press **`r`** in that window to start/stop an MP4 recording (written to `recordings/so101_<timestamp>.mp4`).
+Prompts are loaded from
+[config/deployment_prompts.json](config/deployment_prompts.json). Select one
+with `--prompt-key` or override it with `--prompt "..."`.
+
+A live camera window opens on the robot machine by default. Press **`r`** in
+that window to start or stop an MP4 recording in `recordings/`.
